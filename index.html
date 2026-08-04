@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mirjam Walenta – A great hair day · Schrank</title>
+<link rel="icon" href="icon.png" type="image/png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="GHD Schrank">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>window.tailwind={config:{theme:{extend:{colors:{base:"#0F1117",surface:"#181C27",panel:"#1E2436",border:"#2A3048",teal:"#2DD4BF",amber:"#F59E0B",muted:"#6B7280",ink:"#E8E4DC"},fontFamily:{sans:["Inter","sans-serif"],mono:["\"JetBrains Mono\"","monospace"]}}}}};</script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  *{box-sizing:border-box}
+  body{background:#0F1117;color:#E8E4DC;font-family:'Inter',sans-serif}
+  ::-webkit-scrollbar{width:5px}
+  ::-webkit-scrollbar-track{background:#181C27}
+  ::-webkit-scrollbar-thumb{background:#2A3048;border-radius:3px}
+
+  .tab-active{position:relative;color:#2DD4BF}
+  .tab-active::after{content:'';position:absolute;left:0;bottom:-1px;width:100%;height:2px;background:#2DD4BF;box-shadow:0 0 12px #2DD4BF88;border-radius:1px}
+
+  .drop-zone{border:2px dashed #2A3048;transition:border-color .2s,background .2s,box-shadow .2s}
+  .drop-zone.drag-over{border-color:#2DD4BF;background:#2DD4BF08;box-shadow:0 0 32px #2DD4BF22}
+
+  .tag-chip{font-family:'JetBrains Mono',monospace;font-size:11px;padding:2px 8px;border-radius:4px;background:#2A3048;color:#2DD4BF;cursor:pointer;transition:background .15s;border:none}
+  .tag-chip:hover{background:#2DD4BF22}
+  .tag-chip.active{background:#2DD4BF;color:#0F1117}
+
+  .file-card{background:#1E2436;border:1px solid #2A3048;border-radius:8px;transition:border-color .2s,transform .15s}
+  .file-card:hover{border-color:#2DD4BF44;transform:translateY(-1px)}
+
+  .vault-card{background:#1E2436;border:1px solid #F59E0B33;border-radius:8px;transition:border-color .2s}
+  .vault-card:hover{border-color:#F59E0B66}
+
+  .ds-input{background:#181C27;border:1px solid #2A3048;color:#E8E4DC;border-radius:6px;padding:8px 12px;width:100%;font-size:14px;outline:none;transition:border-color .2s}
+  .ds-input:focus{border-color:#2DD4BF}
+  .ds-input::placeholder{color:#6B7280}
+
+  .btn-teal{background:#2DD4BF;color:#0F1117;font-weight:600;border-radius:6px;padding:8px 16px;font-size:14px;cursor:pointer;transition:opacity .2s;border:none}
+  .btn-teal:hover{opacity:.85}
+  .btn-amber{background:#F59E0B;color:#0F1117;font-weight:600;border-radius:6px;padding:8px 16px;font-size:14px;cursor:pointer;transition:opacity .2s;border:none}
+  .btn-amber:hover{opacity:.85}
+  .btn-ghost{background:transparent;border:1px solid #2A3048;color:#E8E4DC;border-radius:6px;padding:8px 16px;font-size:14px;cursor:pointer;transition:border-color .2s}
+  .btn-ghost:hover{border-color:#2DD4BF}
+
+  .modal-bg{position:fixed;inset:0;background:#0F1117cc;backdrop-filter:blur(4px);z-index:50;display:flex;align-items:center;justify-content:center}
+  .modal-box{background:#1E2436;border:1px solid #2A3048;border-radius:12px;padding:28px;width:min(520px,95vw);max-height:90vh;overflow-y:auto}
+
+  .sidebar-btn{display:flex;align-items:center;gap:2px;width:100%;text-align:left;padding:7px 10px;border-radius:6px;font-size:13px;cursor:pointer;background:transparent;border:none;color:#E8E4DC;transition:background .15s}
+  .sidebar-btn:hover{background:#1E2436}
+  .sidebar-btn.tab-active{background:#2DD4BF11}
+
+  .cat-documents{color:#60A5FA}
+  .cat-html_archive{color:#2DD4BF}
+  .cat-vault{color:#F59E0B}
+  .cat-skills{color:#A78BFA}
+
+  /* Login Screen */
+  .login-screen{position:fixed;inset:0;background:#0F1117;z-index:100;display:flex;align-items:center;justify-content:center}
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- ═══ LOGIN ══════════════════════════════════════════════════════════════ -->
+<div id="loginScreen" class="login-screen">
+  <div style="width:min(380px,92vw)">
+    <div class="flex flex-col items-center mb-8 gap-3">
+      <img src="icon.png" alt="Logo" style="width:56px;height:56px;object-fit:contain">
+      <div class="text-center">
+        <p class="font-semibold text-lg">Mirjam Walenta</p>
+        <p class="font-mono text-xs tracking-widest mt-0.5" style="color:#2DD4BF">A GREAT HAIR DAY · SCHRANK</p>
+      </div>
+    </div>
+    <div class="flex flex-col gap-3" style="background:#1E2436;border:1px solid #2A3048;border-radius:12px;padding:24px">
+      <div>
+        <label class="text-xs text-muted mb-1 block">E-Mail</label>
+        <input id="loginEmail" type="email" class="ds-input" placeholder="deine@email.at" autocomplete="email">
+      </div>
+      <div>
+        <label class="text-xs text-muted mb-1 block">Passwort</label>
+        <input id="loginPassword" type="password" class="ds-input" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <p id="loginError" class="text-xs hidden" style="color:#EF4444"></p>
+      <button class="btn-teal w-full mt-1" onclick="doLogin()">Einloggen</button>
+      <p class="text-xs text-center" style="color:#6B7280">
+        Noch kein Zugang? <span class="cursor-pointer" style="color:#2DD4BF" onclick="showRegister()">Registrieren</span>
+      </p>
+    </div>
+    <!-- Register -->
+    <div id="registerBox" class="hidden mt-3" style="background:#1E2436;border:1px solid #2A3048;border-radius:12px;padding:24px">
+      <p class="text-sm font-medium mb-3">Neuen Zugang anlegen</p>
+      <div class="flex flex-col gap-3">
+        <input id="regEmail" type="email" class="ds-input" placeholder="E-Mail">
+        <input id="regPassword" type="password" class="ds-input" placeholder="Passwort (min. 8 Zeichen)">
+        <input id="regCode" class="ds-input" placeholder="Einladungs-Code">
+        <p id="regError" class="text-xs hidden" style="color:#EF4444"></p>
+        <button class="btn-teal" onclick="doRegister()">Konto erstellen</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ HEADER ════════════════════════════════════════════════════════════ -->
+<header class="border-b border-border sticky top-0 z-40" style="background:#0F1117ee;backdrop-filter:blur(8px)">
+  <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg overflow-hidden flex items-center justify-center shrink-0" style="background:#1E2436;border:1px solid #2A3048">
+        <img src="icon.png" alt="Logo" class="w-7 h-7 object-contain">
+      </div>
+      <div class="flex flex-col leading-tight">
+        <span class="text-xs font-semibold tracking-wide" style="color:#E8E4DC">Mirjam Walenta</span>
+        <span class="font-mono tracking-widest" style="color:#2DD4BF;font-size:10px">A GREAT HAIR DAY · SCHRANK</span>
+      </div>
+    </div>
+    <div class="flex-1 max-w-md relative">
+      <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="#6B7280" stroke-width="2"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
+      <input id="searchInput" class="ds-input" placeholder="Suchen…" style="padding-left:36px">
+    </div>
+    <div class="flex items-center gap-2">
+      <button class="btn-teal flex items-center gap-2" onclick="showUploadModal()">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+        Hochladen
+      </button>
+      <button onclick="doLogout()" class="btn-ghost text-xs px-3">Abmelden</button>
+    </div>
+  </div>
+</header>
+
+<!-- ═══ LAYOUT ════════════════════════════════════════════════════════════ -->
+<div class="max-w-7xl mx-auto px-4 py-6 flex gap-6">
+
+  <!-- SIDEBAR -->
+  <aside class="w-48 shrink-0">
+    <nav class="flex flex-col gap-1">
+      <p class="text-xs font-mono tracking-widest mb-2" style="color:#6B7280">BEREICHE</p>
+      <button class="sidebar-btn tab-active" data-cat="" onclick="setCategory(this,'')">
+        <span>Alle Dateien</span><span id="cnt-all" class="ml-auto text-xs font-mono opacity-50">—</span>
+      </button>
+      <button class="sidebar-btn" data-cat="documents" onclick="setCategory(this,'documents')">
+        <span class="cat-documents">📄 Dokumente</span><span id="cnt-documents" class="ml-auto text-xs font-mono opacity-50">—</span>
+      </button>
+      <button class="sidebar-btn" data-cat="html_archive" onclick="setCategory(this,'html_archive')">
+        <span class="cat-html_archive">🌐 HTML-Apps</span><span id="cnt-html_archive" class="ml-auto text-xs font-mono opacity-50">—</span>
+      </button>
+      <button class="sidebar-btn" data-cat="skills" onclick="setCategory(this,'skills')">
+        <span class="cat-skills">🧠 Skills</span><span id="cnt-skills" class="ml-auto text-xs font-mono opacity-50">—</span>
+      </button>
+      <div class="border-t border-border my-3"></div>
+      <button class="sidebar-btn" data-cat="vault" onclick="setCategory(this,'vault')">
+        <span class="cat-vault">🔐 Tresor</span>
+      </button>
+    </nav>
+    <div class="mt-6">
+      <p class="text-xs font-mono tracking-widest mb-2" style="color:#6B7280">TAGS</p>
+      <div id="tagCloud" class="flex flex-wrap gap-1.5"></div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="flex-1 min-w-0">
+    <div id="dropZone" class="drop-zone rounded-xl p-6 mb-5 text-center cursor-pointer" onclick="showUploadModal()">
+      <div class="pointer-events-none flex flex-col items-center gap-2">
+        <svg class="w-8 h-8 opacity-30" fill="none" viewBox="0 0 24 24" stroke="#2DD4BF" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+        <p class="text-sm" style="color:#6B7280">Datei hier hineinziehen oder <span style="color:#2DD4BF">klicken</span></p>
+        <p class="text-xs font-mono" style="color:#2A3048">PDF · HTML · MD · TXT · JSON</p>
+      </div>
+    </div>
+
+    <div id="fileGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+
+    <!-- VAULT -->
+    <div id="vaultView" class="hidden">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">🔐</span>
+          <h2 class="font-semibold">Tresor</h2>
+          <span class="text-xs font-mono px-2 py-0.5 rounded" style="background:#F59E0B22;color:#F59E0B">AES-256-GCM</span>
+        </div>
+        <button class="btn-amber" onclick="showVaultNewModal()">+ Neuer Eintrag</button>
+      </div>
+      <div id="masterBanner" class="flex items-center gap-3 p-3 rounded-lg mb-4" style="background:#F59E0B11;border:1px solid #F59E0B33">
+        <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="#F59E0B" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+        <input id="masterPasswordInput" type="password" class="ds-input flex-1" style="background:transparent;border:none;padding:0" placeholder="Master-Passwort zum Entschlüsseln…">
+        <button class="btn-amber text-xs py-1.5 px-3" onclick="unlockSession()">Entsperren</button>
+      </div>
+      <div id="vaultGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+    </div>
+  </main>
+</div>
+
+<!-- ═══ UPLOAD MODAL ══════════════════════════════════════════════════════ -->
+<div id="uploadModal" class="modal-bg hidden">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-5">
+      <h3 class="font-semibold text-lg">Datei hochladen</h3>
+      <button onclick="closeModal('uploadModal')" class="text-muted hover:text-ink text-xl">×</button>
+    </div>
+    <div id="modalDropZone" class="drop-zone rounded-lg p-6 mb-4 text-center cursor-pointer" onclick="document.getElementById('fileInput').click()">
+      <input id="fileInput" type="file" class="hidden" multiple onchange="handleFileSelect(this.files)">
+      <div id="dropZoneContent">
+        <svg class="w-7 h-7 mx-auto mb-2 opacity-40" fill="none" viewBox="0 0 24 24" stroke="#2DD4BF" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+        <p class="text-sm text-muted">Datei auswählen oder reinziehen</p>
+      </div>
+      <div id="selectedFileName" class="hidden font-mono text-sm" style="color:#2DD4BF"></div>
+    </div>
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      <div>
+        <label class="text-xs text-muted mb-1 block">Kategorie</label>
+        <select id="uploadCategory" class="ds-input">
+          <option value="">Auto-Erkennung</option>
+          <option value="documents">📄 Dokumente</option>
+          <option value="html_archive">🌐 HTML-Apps</option>
+          <option value="skills">🧠 Skills</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs text-muted mb-1 block">Beschreibung</label>
+        <input id="uploadDesc" class="ds-input" placeholder="Optional…">
+      </div>
+    </div>
+    <div id="smartTagArea" class="hidden mb-3 p-3 rounded-lg" style="background:#2DD4BF08;border:1px solid #2DD4BF22">
+      <p class="text-xs font-mono mb-2" style="color:#2DD4BF">⚡ SMART-TAGS ERKANNT</p>
+      <div id="smartTagChips" class="flex flex-wrap gap-1.5"></div>
+    </div>
+    <div class="mb-4">
+      <label class="text-xs text-muted mb-1 block">Eigene Tags (kommagetrennt)</label>
+      <input id="uploadTags" class="ds-input font-mono text-sm" placeholder="#Mein-Tag, #Wichtig">
+    </div>
+    <div id="uploadProgress" class="hidden mb-3">
+      <div class="h-1 rounded-full overflow-hidden" style="background:#2A3048">
+        <div id="uploadBar" class="h-full transition-all duration-300" style="background:#2DD4BF;width:0%"></div>
+      </div>
+      <p id="uploadStatus" class="text-xs text-muted mt-1">Wird hochgeladen…</p>
+    </div>
+    <div class="flex gap-3 justify-end">
+      <button class="btn-ghost" onclick="closeModal('uploadModal')">Abbrechen</button>
+      <button class="btn-teal" onclick="doUpload()">Hochladen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ VAULT MODAL ═══════════════════════════════════════════════════════ -->
+<div id="vaultModal" class="modal-bg hidden">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-5">
+      <h3 class="font-semibold text-lg flex items-center gap-2"><span style="color:#F59E0B">🔐</span> Neuer Tresor-Eintrag</h3>
+      <button onclick="closeModal('vaultModal')" class="text-muted hover:text-ink text-xl">×</button>
+    </div>
+    <div class="flex flex-col gap-3">
+      <div><label class="text-xs text-muted mb-1 block">Bezeichnung *</label><input id="vLabel" class="ds-input" placeholder="z.B. Supabase Lernquiz"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs text-muted mb-1 block">Dienst / URL</label><input id="vService" class="ds-input" placeholder="supabase.com"></div>
+        <div><label class="text-xs text-muted mb-1 block">Benutzername</label><input id="vUsername" class="ds-input" placeholder="E-Mail oder User"></div>
+      </div>
+      <div>
+        <label class="text-xs text-muted mb-1 block">Passwort / Key *</label>
+        <div class="relative">
+          <input id="vPassword" type="password" class="ds-input pr-10" placeholder="••••••••">
+          <button onclick="togglePw('vPassword')" class="absolute right-3 top-1/2 -translate-y-1/2 text-muted text-xs" style="border:none;background:none;cursor:pointer">👁</button>
+        </div>
+      </div>
+      <div><label class="text-xs text-muted mb-1 block">Notizen</label><textarea id="vNotes" class="ds-input" rows="2" placeholder="Zusätzliche Hinweise…" style="resize:vertical"></textarea></div>
+      <div class="p-3 rounded-lg" style="background:#F59E0B11;border:1px solid #F59E0B33">
+        <label class="text-xs mb-1 block" style="color:#F59E0B">🔑 Master-Passwort (zum Verschlüsseln)</label>
+        <input id="vMaster" type="password" class="ds-input" placeholder="Dein persönliches Master-Passwort">
+      </div>
+    </div>
+    <div class="flex gap-3 justify-end mt-5">
+      <button class="btn-ghost" onclick="closeModal('vaultModal')">Abbrechen</button>
+      <button class="btn-amber" onclick="saveVaultEntry()">Verschlüsselt speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ DETAIL MODAL ══════════════════════════════════════════════════════ -->
+<div id="detailModal" class="modal-bg hidden">
+  <div class="modal-box" style="width:min(760px,95vw);max-width:none">
+    <div class="flex items-center justify-between mb-4">
+      <h3 id="detailTitle" class="font-semibold text-base truncate pr-4"></h3>
+      <button onclick="closeModal('detailModal')" class="text-muted hover:text-ink text-xl shrink-0">×</button>
+    </div>
+    <div id="detailContent"></div>
+  </div>
+</div>
+
+<!-- ═══ TOAST ══════════════════════════════════════════════════════════════ -->
+<div id="toast" class="fixed bottom-5 right-5 z-50 hidden">
+  <div id="toastBox" class="px-4 py-3 rounded-lg text-sm font-medium shadow-lg" style="background:#1E2436;border:1px solid #2A3048"></div>
+</div>
+
+<!-- ═══ JAVASCRIPT ════════════════════════════════════════════════════════ -->
+<script>
+// ─── Supabase Config ─────────────────────────────────────────────────────────
+const SB_URL = 'https://wrxlaltgtgkdomklgrlj.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndyeGxhbHRndGdrZG9ta2xncmxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyNDYwMzYsImV4cCI6MjA5OTgyMjAzNn0.Bw8ch-EJb_cLYTwxHdpjUJWgoCjje3Jc32pB0yiBS8g';
+const INVITE_CODE = 'GREATHAIR2026';
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let S = {
+  token: null, userId: null,
+  files: [], category: '', search: '', activeTag: '',
+  sessionMaster: '',
+  vaultEntries: [],
+};
+
+// ─── Supabase Fetch ───────────────────────────────────────────────────────────
+async function sb(path, opts = {}) {
+  const headers = {
+    'apikey': SB_KEY,
+    'Authorization': `Bearer ${S.token || SB_KEY}`,
+    'Content-Type': 'application/json',
+    ...(opts.prefer ? { 'Prefer': opts.prefer } : {}),
+  };
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, { ...opts, headers });
+  const text = await r.text();
+  if (!r.ok) throw new Error(text);
+  return text ? JSON.parse(text) : [];
+}
+
+async function sbAuth(endpoint, body) {
+  const r = await fetch(`${SB_URL}/auth/v1/${endpoint}`, {
+    method: 'POST',
+    headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error_description || data.msg || 'Fehler');
+  return data;
+}
+
+// ─── Web Crypto AES-256-GCM ───────────────────────────────────────────────────
+async function deriveKey(masterPassword) {
+  const enc = new TextEncoder();
+  const keyMat = await crypto.subtle.importKey('raw', enc.encode(masterPassword), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: enc.encode('ghd-schrank-v1'), iterations: 100000, hash: 'SHA-256' },
+    keyMat, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+  );
+}
+
+async function encryptData(plaintext, masterPassword) {
+  const key = await deriveKey(masterPassword);
+  const iv  = crypto.getRandomValues(new Uint8Array(12));
+  const enc = new TextEncoder();
+  const ct  = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plaintext));
+  return {
+    data_enc: btoa(String.fromCharCode(...new Uint8Array(ct))),
+    iv:       btoa(String.fromCharCode(...iv)),
+  };
+}
+
+async function decryptData(data_enc, iv, masterPassword) {
+  const key  = await deriveKey(masterPassword);
+  const ct   = Uint8Array.from(atob(data_enc), c => c.charCodeAt(0));
+  const ivBuf = Uint8Array.from(atob(iv), c => c.charCodeAt(0));
+  const pt   = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: ivBuf }, key, ct);
+  return new TextDecoder().decode(pt);
+}
+
+// ─── Smart Tagging ────────────────────────────────────────────────────────────
+const TAG_RULES = [
+  { p: /rechnung|invoice|beleg|zahlung|mahnung/i, t: ['#Rechnung'] },
+  { p: /vertrag|contract/i,                        t: ['#Vertrag'] },
+  { p: /passwort|password|zugang|login|key/i,      t: ['#Zugang'] },
+  { p: /\.html?$/i,                                t: ['#App', '#HTML'] },
+  { p: /skill|tutorial|anleitung/i,                t: ['#Skill'] },
+  { p: /steuer|finanzamt/i,                        t: ['#Steuer'] },
+  { p: /versicherung/i,                            t: ['#Versicherung'] },
+  { p: /backup|archiv/i,                           t: ['#Backup'] },
+  { p: /\.md$/i,                                   t: ['#Markdown'] },
+  { p: /\.pdf$/i,                                  t: ['#PDF'] },
+  { p: /lager|produkt|bestand/i,                   t: ['#Lager'] },
+  { p: /salon|friseur|haar/i,                      t: ['#Salon'] },
+  { p: /lernquiz|lehrling|lernen/i,                t: ['#Lehrling'] },
+  { p: /team|mitarbeiter/i,                        t: ['#Team'] },
+  { p: /positionierung|marke|branding/i,           t: ['#Positionierung'] },
+  { p: /cloudflare|scaleway|github|deploy/i,       t: ['#Hosting'] },
+  { p: /supabase/i,                                t: ['#Supabase'] },
+  { p: /\.json$/i,                                 t: ['#JSON'] },
+];
+
+function smartTags(filename) {
+  const h = filename.toLowerCase();
+  const s = new Set();
+  TAG_RULES.forEach(r => { if (r.p.test(h)) r.t.forEach(t => s.add(t)); });
+  const ext = filename.split('.').pop().toLowerCase();
+  if (ext === 'pdf')  s.add('#Dokument');
+  if (ext === 'html') s.add('#App');
+  if (['md','txt'].includes(ext)) s.add('#Notiz');
+  return [...s];
+}
+
+function detectCategory(filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  if (['html','htm'].includes(ext))            return 'html_archive';
+  if (['md','txt','js','py','sh'].includes(ext)) return 'skills';
+  if (['pdf'].includes(ext))                   return 'documents';
+  return 'documents';
+}
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pw    = document.getElementById('loginPassword').value;
+  const err   = document.getElementById('loginError');
+  try {
+    const d = await sbAuth('token?grant_type=password', { email, password: pw });
+    S.token  = d.access_token;
+    S.userId = d.user.id;
+    localStorage.setItem('ghd_token', d.access_token);
+    localStorage.setItem('ghd_user',  d.user.id);
+    document.getElementById('loginScreen').style.display = 'none';
+    init();
+  } catch(e) {
+    err.textContent = 'Falsche E-Mail oder Passwort.';
+    err.classList.remove('hidden');
+  }
+}
+
+async function doRegister() {
+  const email = document.getElementById('regEmail').value.trim();
+  const pw    = document.getElementById('regPassword').value;
+  const code  = document.getElementById('regCode').value.trim();
+  const err   = document.getElementById('regError');
+  if (code !== INVITE_CODE) { err.textContent = 'Falscher Einladungs-Code.'; err.classList.remove('hidden'); return; }
+  try {
+    await sbAuth('signup', { email, password: pw });
+    err.style.color = '#2DD4BF';
+    err.textContent = 'Konto erstellt! Bitte E-Mail bestätigen, dann einloggen.';
+    err.classList.remove('hidden');
+  } catch(e) {
+    err.textContent = e.message;
+    err.classList.remove('hidden');
+  }
+}
+
+function showRegister() {
+  document.getElementById('registerBox').classList.toggle('hidden');
+}
+
+function doLogout() {
+  localStorage.removeItem('ghd_token');
+  localStorage.removeItem('ghd_user');
+  location.reload();
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // Auto-Login aus localStorage
+  const t = localStorage.getItem('ghd_token');
+  const u = localStorage.getItem('ghd_user');
+  if (t && u) {
+    S.token = t; S.userId = u;
+    document.getElementById('loginScreen').style.display = 'none';
+    init();
+  }
+  document.getElementById('loginPassword').addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
+  document.getElementById('searchInput').addEventListener('input', e => { S.search = e.target.value; renderFiles(); });
+  setupDrop();
+});
+
+function init() {
+  fetchFiles();
+  setInterval(fetchFiles, 60000);
+}
+
+// ─── Drag & Drop ──────────────────────────────────────────────────────────────
+function setupDrop() {
+  const zone = document.getElementById('dropZone');
+  const modal = document.getElementById('modalDropZone');
+
+  document.body.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  document.body.addEventListener('dragleave', e => { if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over'); });
+  document.body.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('drag-over');
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) { window._pendingFiles = files; showUploadModal(files); }
+  });
+  modal.addEventListener('dragover', e => { e.preventDefault(); modal.classList.add('drag-over'); });
+  modal.addEventListener('dragleave', () => modal.classList.remove('drag-over'));
+  modal.addEventListener('drop', e => { e.preventDefault(); modal.classList.remove('drag-over'); handleFileSelect(e.dataTransfer.files); });
+}
+
+function handleFileSelect(fileList) {
+  const files = Array.from(fileList);
+  if (!files.length) return;
+  window._pendingFiles = files;
+  document.getElementById('selectedFileName').textContent = files.map(f => f.name).join(', ');
+  document.getElementById('selectedFileName').classList.remove('hidden');
+  document.getElementById('dropZoneContent').classList.add('hidden');
+  // Smart Tags
+  const tags = smartTags(files[0].name);
+  if (tags.length) {
+    document.getElementById('smartTagArea').classList.remove('hidden');
+    const c = document.getElementById('smartTagChips');
+    c.innerHTML = '';
+    tags.forEach(t => {
+      const chip = document.createElement('button');
+      chip.className = 'tag-chip active'; chip.textContent = t;
+      chip.onclick = () => chip.classList.toggle('active');
+      c.appendChild(chip);
+    });
+    if (!document.getElementById('uploadTags').value)
+      document.getElementById('uploadTags').value = tags.join(', ');
+  }
+}
+
+// ─── Upload zu Supabase Storage ───────────────────────────────────────────────
+async function doUpload() {
+  const files = window._pendingFiles || [];
+  if (!files.length) { toast('Bitte zuerst eine Datei auswählen.', 'warn'); return; }
+
+  const category = document.getElementById('uploadCategory').value;
+  const desc     = document.getElementById('uploadDesc').value;
+  const tagInput = document.getElementById('uploadTags').value;
+  const userTags = tagInput.split(',').map(t => t.trim()).filter(Boolean);
+  const activeSmart = [...document.querySelectorAll('#smartTagChips .active')].map(c => c.textContent);
+  const allTags = [...new Set([...userTags, ...activeSmart])];
+
+  document.getElementById('uploadProgress').classList.remove('hidden');
+  let done = 0;
+
+  for (const file of files) {
+    const cat = category || detectCategory(file.name);
+    const path = `${S.userId}/${cat}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
+
+    try {
+      // 1. Datei in Supabase Storage hochladen
+      const r = await fetch(`${SB_URL}/storage/v1/object/schrank-files/${path}`, {
+        method: 'POST',
+        headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token}`, 'Content-Type': file.type || 'application/octet-stream' },
+        body: file,
+      });
+      if (!r.ok) throw new Error(await r.text());
+
+      const fileUrl = `${SB_URL}/storage/v1/object/public/schrank-files/${path}`;
+
+      // 2. Metadaten in DB speichern
+      await sb('schrank_files', {
+        method: 'POST',
+        prefer: 'return=minimal',
+        body: JSON.stringify({
+          user_id: S.userId,
+          name: file.name,
+          category: cat,
+          file_url: fileUrl,
+          storage_path: path,
+          mimetype: file.type || 'application/octet-stream',
+          size: file.size,
+          tags: allTags,
+          description: desc,
+        }),
+      });
+
+      done++;
+      document.getElementById('uploadBar').style.width = Math.round(done/files.length*100)+'%';
+      document.getElementById('uploadStatus').textContent = `${done}/${files.length} hochgeladen`;
+    } catch(e) {
+      toast('Fehler: ' + e.message, 'error');
+    }
+  }
+
+  toast(`${done} Datei(en) hochgeladen!`);
+  closeModal('uploadModal');
+  resetUploadModal();
+  fetchFiles();
+}
+
+function resetUploadModal() {
+  window._pendingFiles = [];
+  document.getElementById('selectedFileName').classList.add('hidden');
+  document.getElementById('dropZoneContent').classList.remove('hidden');
+  document.getElementById('smartTagArea').classList.add('hidden');
+  document.getElementById('uploadTags').value = '';
+  document.getElementById('uploadDesc').value = '';
+  document.getElementById('uploadProgress').classList.add('hidden');
+  document.getElementById('uploadBar').style.width = '0%';
+}
+
+// ─── Dateien laden ────────────────────────────────────────────────────────────
+async function fetchFiles() {
+  try {
+    let q = `schrank_files?user_id=eq.${S.userId}&order=created_at.desc`;
+    if (S.category && S.category !== 'vault') q += `&category=eq.${S.category}`;
+    S.files = await sb(q);
+    renderFiles();
+    updateCounts();
+    buildTagCloud();
+  } catch(e) { console.error(e); }
+}
+
+function updateCounts() {
+  const all = S.files;
+  document.getElementById('cnt-all').textContent = all.length;
+  ['documents','html_archive','skills'].forEach(c => {
+    const el = document.getElementById('cnt-'+c);
+    if (el) el.textContent = all.filter(f => f.category === c).length;
+  });
+}
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+function renderFiles() {
+  const grid  = document.getElementById('fileGrid');
+  const vault = document.getElementById('vaultView');
+  const drop  = document.getElementById('dropZone');
+
+  if (S.category === 'vault') {
+    grid.classList.add('hidden'); drop.classList.add('hidden');
+    vault.classList.remove('hidden');
+    fetchVaultEntries();
+    return;
+  }
+  vault.classList.add('hidden'); grid.classList.remove('hidden'); drop.classList.remove('hidden');
+
+  let list = S.files;
+  if (S.search) {
+    const s = S.search.toLowerCase();
+    list = list.filter(f =>
+      f.name.toLowerCase().includes(s) ||
+      (f.description||'').toLowerCase().includes(s) ||
+      (f.tags||[]).some(t => t.toLowerCase().includes(s))
+    );
+  }
+  if (S.activeTag) list = list.filter(f => (f.tags||[]).includes(S.activeTag));
+
+  if (!list.length) {
+    grid.innerHTML = `<div class="col-span-3 py-12 text-center text-sm" style="color:#6B7280">Keine Dateien. Oben hochladen oder Filter anpassen.</div>`;
+    return;
+  }
+  grid.innerHTML = list.map(f => fileCard(f)).join('');
+}
+
+const CAT_ICON = { documents:'📄', html_archive:'🌐', skills:'🧠', vault:'🔐' };
+
+function fileCard(f) {
+  const tags  = (f.tags||[]).map(t => `<button class="tag-chip" onclick="filterTag('${esc(t)}')">${esc(t)}</button>`).join('');
+  const date  = new Date(f.created_at).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const size  = f.size ? (f.size < 1024*1024 ? (f.size/1024).toFixed(1)+' KB' : (f.size/1024/1024).toFixed(1)+' MB') : '';
+  const isHtml = f.category === 'html_archive';
+  const isLink = f.file_url;
+
+  return `<div class="file-card p-4 flex flex-col gap-3">
+    <div class="flex items-start justify-between gap-2">
+      <div class="flex items-center gap-2 min-w-0">
+        <span class="text-xl shrink-0">${CAT_ICON[f.category]||'📁'}</span>
+        <div class="min-w-0">
+          <p class="font-medium text-sm truncate" title="${esc(f.name)}">${esc(f.name)}</p>
+          <p class="text-xs font-mono mt-0.5" style="color:#6B7280">${date}${size ? ' · '+size : ''}</p>
+        </div>
+      </div>
+      <div class="flex gap-1 shrink-0">
+        ${isHtml && isLink ? `<button onclick="previewHtml('${esc(f.file_url)}','${esc(f.name)}')" class="text-xs px-2 py-1 rounded" style="background:#2DD4BF11;color:#2DD4BF;border:none;cursor:pointer">Vorschau</button>` : ''}
+        ${isLink ? `<a href="${esc(f.file_url)}" target="_blank" class="text-xs px-2 py-1 rounded" style="background:#FFFFFF08;color:#6B7280;text-decoration:none">↗</a>` : ''}
+        <button onclick="deleteFile('${f.id}','${esc(f.storage_path)}','${esc(f.name)}')" class="text-xs px-2 py-1 rounded" style="background:#FFFFFF08;color:#6B7280;border:none;cursor:pointer">✕</button>
+      </div>
+    </div>
+    ${f.description ? `<p class="text-xs" style="color:#6B7280">${esc(f.description)}</p>` : ''}
+    <div class="flex flex-wrap gap-1">${tags}</div>
+  </div>`;
+}
+
+// ─── Tag-Cloud ────────────────────────────────────────────────────────────────
+function buildTagCloud() {
+  const counts = {};
+  S.files.forEach(f => (f.tags||[]).forEach(t => counts[t]=(counts[t]||0)+1));
+  const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,20);
+  document.getElementById('tagCloud').innerHTML = sorted.map(([t]) =>
+    `<button class="tag-chip ${S.activeTag===t?'active':''}" onclick="filterTag('${esc(t)}')">${esc(t)}</button>`
+  ).join('');
+}
+
+function filterTag(tag) {
+  S.activeTag = S.activeTag === tag ? '' : tag;
+  buildTagCloud(); renderFiles();
+}
+
+function setCategory(el, cat) {
+  S.category = cat; S.activeTag = '';
+  document.querySelectorAll('.sidebar-btn').forEach(b => b.classList.remove('tab-active'));
+  el.classList.add('tab-active');
+  if (cat === 'vault') { renderFiles(); return; }
+  fetchFiles();
+}
+
+// ─── Datei löschen ────────────────────────────────────────────────────────────
+async function deleteFile(id, storagePath, name) {
+  if (!confirm(`„${name}" wirklich löschen?`)) return;
+  try {
+    // Storage
+    await fetch(`${SB_URL}/storage/v1/object/schrank-files/${storagePath}`, {
+      method: 'DELETE',
+      headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token}` },
+    });
+    // DB
+    await sb(`schrank_files?id=eq.${id}`, { method: 'DELETE' });
+    toast(`„${name}" gelöscht.`);
+    fetchFiles();
+  } catch(e) { toast('Fehler: '+e.message, 'error'); }
+}
+
+// ─── HTML Vorschau ────────────────────────────────────────────────────────────
+function previewHtml(url, name) {
+  document.getElementById('detailTitle').textContent = name;
+  document.getElementById('detailContent').innerHTML =
+    `<iframe src="${url}" style="border:none;width:100%;height:500px;border-radius:6px;background:white" sandbox="allow-scripts allow-same-origin"></iframe>`;
+  document.getElementById('detailModal').classList.remove('hidden');
+}
+
+// ─── VAULT ────────────────────────────────────────────────────────────────────
+async function fetchVaultEntries() {
+  try {
+    S.vaultEntries = await sb(`schrank_vault?user_id=eq.${S.userId}&order=created_at.desc`);
+    renderVault();
+  } catch(e) { console.error(e); }
+}
+
+function renderVault() {
+  const grid = document.getElementById('vaultGrid');
+  if (!S.vaultEntries.length) {
+    grid.innerHTML = '<div class="col-span-2 py-8 text-center text-sm" style="color:#6B7280">Noch keine Einträge. Ersten anlegen.</div>';
+    return;
+  }
+  grid.innerHTML = S.vaultEntries.map(v => `
+    <div class="vault-card p-4">
+      <div class="flex items-center justify-between mb-2">
+        <div>
+          <p class="font-medium text-sm">${esc(v.label)}</p>
+          ${v.service ? `<p class="text-xs font-mono" style="color:#F59E0B88">${esc(v.service)}</p>` : ''}
+        </div>
+        <button onclick="delVault('${v.id}')" class="text-xs" style="color:#6B7280;background:none;border:none;cursor:pointer">✕</button>
+      </div>
+      ${v.username ? `<p class="text-xs mb-2" style="color:#6B7280">👤 ${esc(v.username)}</p>` : ''}
+      <div id="vd-${v.id}" class="text-xs font-mono" style="color:#6B7280;font-style:italic">— verschlüsselt —</div>
+      <button onclick="decryptEntry('${v.id}')" class="mt-2 text-xs px-3 py-1 rounded" style="background:#F59E0B22;color:#F59E0B;border:none;cursor:pointer">Entschlüsseln</button>
+    </div>
+  `).join('');
+}
+
+async function saveVaultEntry() {
+  const label  = document.getElementById('vLabel').value.trim();
+  const service= document.getElementById('vService').value.trim();
+  const uname  = document.getElementById('vUsername').value.trim();
+  const pw     = document.getElementById('vPassword').value;
+  const notes  = document.getElementById('vNotes').value.trim();
+  const master = document.getElementById('vMaster').value;
+
+  if (!label)  { toast('Bezeichnung fehlt.','warn'); return; }
+  if (!pw)     { toast('Passwort/Key fehlt.','warn'); return; }
+  if (!master) { toast('Master-Passwort fehlt.','warn'); return; }
+
+  try {
+    const plain = JSON.stringify({ password: pw, notes });
+    const { data_enc, iv } = await encryptData(plain, master);
+
+    await sb('schrank_vault', {
+      method: 'POST', prefer: 'return=minimal',
+      body: JSON.stringify({ user_id: S.userId, label, service, username: uname, data_enc, iv }),
+    });
+
+    toast('Sicher verschlüsselt gespeichert!');
+    closeModal('vaultModal');
+    ['vLabel','vService','vUsername','vPassword','vNotes','vMaster'].forEach(id => document.getElementById(id).value='');
+    fetchVaultEntries();
+  } catch(e) { toast('Fehler: '+e.message,'error'); }
+}
+
+async function decryptEntry(id) {
+  const master = S.sessionMaster || document.getElementById('masterPasswordInput').value;
+  if (!master) { toast('Master-Passwort eingeben.','warn'); return; }
+
+  const entry = S.vaultEntries.find(v => v.id === id);
+  if (!entry) return;
+
+  try {
+    const plain = await decryptData(entry.data_enc, entry.iv, master);
+    const data  = JSON.parse(plain);
+    const el    = document.getElementById('vd-'+id);
+    el.innerHTML = `
+      <div class="mt-1">🔑 <span class="select-all" style="color:#E8E4DC">${esc(data.password)}</span>
+      <button onclick="navigator.clipboard.writeText('${esc(data.password)}').then(()=>toast('Kopiert!'))" style="margin-left:6px;background:#2DD4BF22;color:#2DD4BF;border:none;border-radius:4px;padding:1px 6px;font-size:10px;cursor:pointer">Kopieren</button></div>
+      ${data.notes ? `<div class="mt-1" style="color:#6B7280;font-style:normal">${esc(data.notes)}</div>` : ''}
+    `;
+  } catch(e) { toast('Falsches Master-Passwort.','error'); }
+}
+
+function unlockSession() {
+  const pw = document.getElementById('masterPasswordInput').value;
+  if (!pw) { toast('Master-Passwort eingeben.','warn'); return; }
+  S.sessionMaster = pw;
+  document.getElementById('masterBanner').style.opacity = '0.5';
+  toast('Session entsperrt.');
+}
+
+async function delVault(id) {
+  if (!confirm('Tresor-Eintrag unwiderruflich löschen?')) return;
+  await sb(`schrank_vault?id=eq.${id}`, { method: 'DELETE' });
+  toast('Gelöscht.'); fetchVaultEntries();
+}
+
+// ─── Hilfsfunktionen ──────────────────────────────────────────────────────────
+function showUploadModal(files) {
+  if (S.category === 'vault') { showVaultNewModal(); return; }
+  document.getElementById('uploadModal').classList.remove('hidden');
+  if (S.category) document.getElementById('uploadCategory').value = S.category;
+}
+function showVaultNewModal() { document.getElementById('vaultModal').classList.remove('hidden'); }
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+function togglePw(id) { const i=document.getElementById(id); i.type=i.type==='password'?'text':'password'; }
+function esc(s) { return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+let _toastT;
+function toast(msg, type='ok') {
+  const el=document.getElementById('toast'), box=document.getElementById('toastBox');
+  const c={ok:'#2DD4BF',warn:'#F59E0B',error:'#EF4444'};
+  box.style.borderColor=c[type]; box.style.color=c[type]; box.textContent=msg;
+  el.classList.remove('hidden');
+  clearTimeout(_toastT);
+  _toastT=setTimeout(()=>el.classList.add('hidden'),3500);
+}
+
+document.addEventListener('click', e => {
+  ['uploadModal','vaultModal','detailModal'].forEach(id=>{
+    if(e.target===document.getElementById(id)) closeModal(id);
+  });
+});
+</script>
+</body>
+</html>
