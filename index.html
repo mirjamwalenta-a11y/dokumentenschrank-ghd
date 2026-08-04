@@ -509,6 +509,17 @@ function handleFileSelect(fileList) {
 }
 
 // ─── Upload zu Supabase Storage ───────────────────────────────────────────────
+async function checkDuplicate(fileName, fileSize) {
+  // Prüft ob eine Datei mit gleichem Name und ähnlicher Größe schon existiert
+  const existing = S.files.filter(f => {
+    const sameName = f.name.toLowerCase() === fileName.toLowerCase() ||
+                     (f.original||'').toLowerCase() === fileName.toLowerCase();
+    const sameSize = Math.abs((f.size||0) - fileSize) < 1024; // Toleranz 1KB
+    return sameName || sameSize;
+  });
+  return existing;
+}
+
 async function doUpload() {
   const files = window._pendingFiles || [];
   if (!files.length) { toast('Bitte zuerst eine Datei auswählen.', 'warn'); return; }
@@ -519,6 +530,27 @@ async function doUpload() {
   const userTags = tagInput.split(',').map(t => t.trim()).filter(Boolean);
   const activeSmart = [...document.querySelectorAll('#smartTagChips .active')].map(c => c.textContent);
   const allTags = [...new Set([...userTags, ...activeSmart])];
+
+  // Duplikat-Check für alle Dateien
+  const duplikate = [];
+  for (const file of files) {
+    const found = await checkDuplicate(file.name, file.size);
+    if (found.length > 0) duplikate.push({ file, existing: found[0] });
+  }
+
+  if (duplikate.length > 0) {
+    const namen = duplikate.map(d => '- ' + d.file.name).join('\n');
+    const weiter = confirm(
+      `⚠️ Mögliche Duplikate gefunden:
+
+${namen}
+
+Diese Datei(en) scheinen bereits im Schrank zu sein.
+
+Trotzdem hochladen?`
+    );
+    if (!weiter) return;
+  }
 
   document.getElementById('uploadProgress').classList.remove('hidden');
   let done = 0;
@@ -641,26 +673,21 @@ function fileCard(f) {
   const size   = f.size ? (f.size < 1024*1024 ? (f.size/1024).toFixed(1)+' KB' : (f.size/1024/1024).toFixed(1)+' MB') : '';
   const isHtml = f.category === 'html_archive';
   const isLink = f.file_url;
-  // Anzeigename: original (lesbarer Name) bevorzugen, sonst Dateiname
   const displayName = f.original || f.name;
 
   return `<div class="file-card p-4 flex flex-col gap-3">
-    <div class="flex items-start justify-between gap-2">
-      <div class="flex gap-3 min-w-0 flex-1">
-        <span class="text-2xl shrink-0 mt-0.5">${CAT_ICON[f.category]||'📁'}</span>
-        <div class="min-w-0 flex-1">
-          <p class="font-medium text-sm leading-snug" style="word-break:break-word">${esc(displayName)}</p>
-          <p class="text-xs font-mono mt-1" style="color:#6B7280">${date}${size ? ' · '+size : ''}</p>
-        </div>
-      </div>
-      <div class="flex flex-col gap-1 shrink-0 ml-2">
-        ${isHtml && isLink ? `<button onclick="previewHtml('${esc(f.file_url)}','${esc(displayName)}')" class="text-xs px-2 py-1 rounded" style="background:#2DD4BF11;color:#2DD4BF;border:none;cursor:pointer">Vorschau</button>` : ''}
-        ${isLink ? `<a href="${esc(f.file_url)}" target="_blank" class="text-xs px-2 py-1 rounded text-center" style="background:#FFFFFF08;color:#6B7280;text-decoration:none">Öffnen ↗</a>` : ''}
-        <button onclick="deleteFile('${f.id}','${esc(f.storage_path)}','${esc(displayName)}')" class="text-xs px-2 py-1 rounded" style="background:#FFFFFF08;color:#6B7280;border:none;cursor:pointer">✕ Löschen</button>
-      </div>
+    <div class="flex items-center gap-3 mb-1">
+      <span class="text-2xl shrink-0">${CAT_ICON[f.category]||'📁'}</span>
+      <p class="font-semibold text-sm flex-1" style="overflow-wrap:anywhere;line-height:1.4">${esc(displayName)}</p>
     </div>
-    ${f.description ? `<p class="text-xs leading-relaxed" style="color:#6B7280">${esc(f.description)}</p>` : ''}
-    <div class="flex flex-wrap gap-1">${tags}</div>
+    <p class="text-xs font-mono" style="color:#6B7280">${date}${size ? ' · '+size : ''}</p>
+    ${f.description ? `<p class="text-xs" style="color:#6B7280;line-height:1.5">${esc(f.description)}</p>` : ''}
+    <div class="flex flex-wrap gap-1 mb-1">${tags}</div>
+    <div class="flex gap-2 flex-wrap">
+      ${isHtml && isLink ? `<button onclick="previewHtml('${esc(f.file_url)}','${esc(displayName)}')" style="background:#2DD4BF22;color:#2DD4BF;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;font-weight:600">👁 Vorschau</button>` : ''}
+      ${isLink ? `<a href="${esc(f.file_url)}" target="_blank" style="background:#FFFFFF0A;color:#9CA3AF;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;text-decoration:none;display:inline-block">↗ Öffnen</a>` : ''}
+      <button onclick="deleteFile('${f.id}','${esc(f.storage_path)}','${esc(displayName)}')" style="background:#EF444411;color:#EF4444;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;margin-left:auto">✕</button>
+    </div>
   </div>`;
 }
 
@@ -689,7 +716,10 @@ function setCategory(el, cat) {
 
 // ─── Datei löschen ────────────────────────────────────────────────────────────
 async function deleteFile(id, storagePath, name) {
-  if (!confirm(`„${name}" wirklich löschen?`)) return;
+  const bestaetigt = confirm(
+    `Datei loeschen?\n\n"${name}"\n\nWird aus dem Schrank geloescht.\nOriginaldatei auf deinem Geraet bleibt erhalten.\n\nWirklich loeschen?`
+  );
+  if (!bestaetigt) return;
   try {
     // Storage
     await fetch(`${SB_URL}/storage/v1/object/schrank-files/${storagePath}`, {
@@ -698,7 +728,7 @@ async function deleteFile(id, storagePath, name) {
     });
     // DB
     await sb(`schrank_files?id=eq.${id}`, { method: 'DELETE' });
-    toast(`„${name}" gelöscht.`);
+    toast(`"${name}" wurde geloescht.`);
     fetchFiles();
   } catch(e) { toast('Fehler: '+e.message, 'error'); }
 }
@@ -735,7 +765,7 @@ function renderVault() {
         <button onclick="delVault('${v.id}')" class="text-xs" style="color:#6B7280;background:none;border:none;cursor:pointer">✕</button>
       </div>
       ${v.username ? `<p class="text-xs mb-2" style="color:#6B7280">👤 ${esc(v.username)}</p>` : ''}
-      <div id="vd-${v.id}" class="text-xs font-mono" style="color:#6B7280;font-style:italic">— verschlüsselt —</div>
+      <div id="vd-${v.id}" class="text-xs font-mono" style="color:#6B7280;font-style:italic">-- verschluesselt --</div>
       <button onclick="decryptEntry('${v.id}')" class="mt-2 text-xs px-3 py-1 rounded" style="background:#F59E0B22;color:#F59E0B;border:none;cursor:pointer">Entschlüsseln</button>
     </div>
   `).join('');
