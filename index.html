@@ -169,7 +169,7 @@
       </div>
     </div>
 
-    <div id="fileGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    <div id="fileGrid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"></div>
 
     <!-- VAULT -->
     <div id="vaultView" class="hidden">
@@ -636,28 +636,30 @@ function renderFiles() {
 const CAT_ICON = { documents:'📄', html_archive:'🌐', skills:'🧠', vault:'🔐' };
 
 function fileCard(f) {
-  const tags  = (f.tags||[]).map(t => `<button class="tag-chip" onclick="filterTag('${esc(t)}')">${esc(t)}</button>`).join('');
-  const date  = new Date(f.created_at).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric'});
-  const size  = f.size ? (f.size < 1024*1024 ? (f.size/1024).toFixed(1)+' KB' : (f.size/1024/1024).toFixed(1)+' MB') : '';
+  const tags   = (f.tags||[]).map(t => `<button class="tag-chip" onclick="filterTag('${esc(t)}')">${esc(t)}</button>`).join('');
+  const date   = new Date(f.created_at).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const size   = f.size ? (f.size < 1024*1024 ? (f.size/1024).toFixed(1)+' KB' : (f.size/1024/1024).toFixed(1)+' MB') : '';
   const isHtml = f.category === 'html_archive';
   const isLink = f.file_url;
+  // Anzeigename: original (lesbarer Name) bevorzugen, sonst Dateiname
+  const displayName = f.original || f.name;
 
   return `<div class="file-card p-4 flex flex-col gap-3">
     <div class="flex items-start justify-between gap-2">
-      <div class="flex items-center gap-2 min-w-0">
-        <span class="text-xl shrink-0">${CAT_ICON[f.category]||'📁'}</span>
-        <div class="min-w-0">
-          <p class="font-medium text-sm truncate" title="${esc(f.name)}">${esc(f.name)}</p>
-          <p class="text-xs font-mono mt-0.5" style="color:#6B7280">${date}${size ? ' · '+size : ''}</p>
+      <div class="flex gap-3 min-w-0 flex-1">
+        <span class="text-2xl shrink-0 mt-0.5">${CAT_ICON[f.category]||'📁'}</span>
+        <div class="min-w-0 flex-1">
+          <p class="font-medium text-sm leading-snug" style="word-break:break-word">${esc(displayName)}</p>
+          <p class="text-xs font-mono mt-1" style="color:#6B7280">${date}${size ? ' · '+size : ''}</p>
         </div>
       </div>
-      <div class="flex gap-1 shrink-0">
-        ${isHtml && isLink ? `<button onclick="previewHtml('${esc(f.file_url)}','${esc(f.name)}')" class="text-xs px-2 py-1 rounded" style="background:#2DD4BF11;color:#2DD4BF;border:none;cursor:pointer">Vorschau</button>` : ''}
-        ${isLink ? `<a href="${esc(f.file_url)}" target="_blank" class="text-xs px-2 py-1 rounded" style="background:#FFFFFF08;color:#6B7280;text-decoration:none">↗</a>` : ''}
-        <button onclick="deleteFile('${f.id}','${esc(f.storage_path)}','${esc(f.name)}')" class="text-xs px-2 py-1 rounded" style="background:#FFFFFF08;color:#6B7280;border:none;cursor:pointer">✕</button>
+      <div class="flex flex-col gap-1 shrink-0 ml-2">
+        ${isHtml && isLink ? `<button onclick="previewHtml('${esc(f.file_url)}','${esc(displayName)}')" class="text-xs px-2 py-1 rounded" style="background:#2DD4BF11;color:#2DD4BF;border:none;cursor:pointer">Vorschau</button>` : ''}
+        ${isLink ? `<a href="${esc(f.file_url)}" target="_blank" class="text-xs px-2 py-1 rounded text-center" style="background:#FFFFFF08;color:#6B7280;text-decoration:none">Öffnen ↗</a>` : ''}
+        <button onclick="deleteFile('${f.id}','${esc(f.storage_path)}','${esc(displayName)}')" class="text-xs px-2 py-1 rounded" style="background:#FFFFFF08;color:#6B7280;border:none;cursor:pointer">✕ Löschen</button>
       </div>
     </div>
-    ${f.description ? `<p class="text-xs" style="color:#6B7280">${esc(f.description)}</p>` : ''}
+    ${f.description ? `<p class="text-xs leading-relaxed" style="color:#6B7280">${esc(f.description)}</p>` : ''}
     <div class="flex flex-wrap gap-1">${tags}</div>
   </div>`;
 }
