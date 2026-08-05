@@ -531,31 +531,37 @@ async function doUpload() {
   const activeSmart = [...document.querySelectorAll('#smartTagChips .active')].map(c => c.textContent);
   const allTags = [...new Set([...userTags, ...activeSmart])];
 
-  // Duplikat-Check für alle Dateien
+  // Duplikat-Check: Duplikate automatisch aussortieren
+  const neueDateien = [];
   const duplikate = [];
   for (const file of files) {
     const found = await checkDuplicate(file.name, file.size);
-    if (found.length > 0) duplikate.push({ file, existing: found[0] });
+    if (found.length > 0) {
+      duplikate.push({ file, existing: found[0] });
+    } else {
+      neueDateien.push(file);
+    }
+  }
+
+  if (duplikate.length > 0 && neueDateien.length === 0) {
+    // Alle Dateien sind Duplikate
+    const namen = duplikate.map(d => '· ' + d.file.name).join('\n');
+    toast(`Bereits vorhanden – nichts hochgeladen:\n${namen}`, 'warn');
+    return;
   }
 
   if (duplikate.length > 0) {
-    const namen = duplikate.map(d => '- ' + d.file.name).join('\n');
-    const weiter = confirm(
-      `⚠️ Mögliche Duplikate gefunden:
-
-${namen}
-
-Diese Datei(en) scheinen bereits im Schrank zu sein.
-
-Trotzdem hochladen?`
-    );
-    if (!weiter) return;
+    // Manche sind Duplikate, manche neu → Info-Toast
+    const namen = duplikate.map(d => d.file.name).join(', ');
+    toast(`${duplikate.length} Duplikat(e) übersprungen: ${namen}`, 'warn');
   }
+
+  const filesToUpload = neueDateien;
 
   document.getElementById('uploadProgress').classList.remove('hidden');
   let done = 0;
 
-  for (const file of files) {
+  for (const file of filesToUpload) {
     const cat = category || detectCategory(file.name);
     const path = `${S.userId}/${cat}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
 
@@ -588,14 +594,14 @@ Trotzdem hochladen?`
       });
 
       done++;
-      document.getElementById('uploadBar').style.width = Math.round(done/files.length*100)+'%';
-      document.getElementById('uploadStatus').textContent = `${done}/${files.length} hochgeladen`;
+      document.getElementById('uploadBar').style.width = Math.round(done/filesToUpload.length*100)+'%';
+      document.getElementById('uploadStatus').textContent = `${done}/${filesToUpload.length} hochgeladen`;
     } catch(e) {
       toast('Fehler: ' + e.message, 'error');
     }
   }
 
-  toast(`${done} Datei(en) hochgeladen!`);
+  if (done > 0) toast(`${done} Datei(en) hochgeladen!`);
   closeModal('uploadModal');
   resetUploadModal();
   fetchFiles();
