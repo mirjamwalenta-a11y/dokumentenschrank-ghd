@@ -60,6 +60,22 @@
 
   /* Login Screen */
   .login-screen{position:fixed;inset:0;background:#0F1117;z-index:100;display:flex;align-items:center;justify-content:center}
+
+  /* Drawer Styles */
+  .drawer-btn{display:flex;align-items:center;gap:2px;width:100%;text-align:left;padding:7px 10px;border-radius:6px;font-size:13px;cursor:pointer;background:transparent;border:none;color:#E8E4DC;transition:background .15s;position:relative}
+  .drawer-btn:hover{background:#1E2436}
+  .drawer-btn.tab-active{background:#2DD4BF11;color:#2DD4BF}
+  .drawer-btn:hover .drawer-actions{opacity:1}
+  .drawer-actions{opacity:0;transition:opacity .15s;display:flex;gap:2px;margin-left:auto}
+  .drawer-action-btn{background:none;border:none;cursor:pointer;color:#6B7280;font-size:11px;padding:2px 4px;border-radius:3px;line-height:1}
+  .drawer-action-btn:hover{background:#2A3048;color:#E8E4DC}
+  .drawer-drag-handle{cursor:grab;color:#2A3048;font-size:10px;padding:0 2px}
+  .drawer-drag-handle:active{cursor:grabbing}
+  .drawer-item{transition:opacity .2s}
+  .drawer-item.dragging{opacity:.4}
+  .drawer-item.drag-over-top{border-top:2px solid #2DD4BF}
+  .drawer-item.drag-over-bottom{border-bottom:2px solid #2DD4BF}
+  .drawer-header-area{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
 </style>
 </head>
 <body class="min-h-screen">
@@ -154,6 +170,13 @@
       </button>
     </nav>
     <div class="mt-6">
+      <div class="drawer-header-area">
+        <p class="text-xs font-mono tracking-widest" style="color:#6B7280">DOKUMENTEN-LADEN</p>
+        <button onclick="showDrawerModal()" title="Neue Lade" style="background:none;border:none;color:#2DD4BF;cursor:pointer;font-size:16px;line-height:1;padding:0 2px">+</button>
+      </div>
+      <div id="drawerList" class="flex flex-col gap-0.5 mb-3"></div>
+    </div>
+    <div class="mt-4">
       <p class="text-xs font-mono tracking-widest mb-2" style="color:#6B7280">TAGS</p>
       <div id="tagCloud" class="flex flex-wrap gap-1.5"></div>
     </div>
@@ -221,6 +244,12 @@
         <input id="uploadDesc" class="ds-input" placeholder="Optional…">
       </div>
     </div>
+    <div class="mb-3">
+      <label class="text-xs text-muted mb-1 block">Dokumenten-Lade</label>
+      <select id="uploadDrawer" class="ds-input">
+        <option value="">Keine Lade</option>
+      </select>
+    </div>
     <div id="smartTagArea" class="hidden mb-3 p-3 rounded-lg" style="background:#2DD4BF08;border:1px solid #2DD4BF22">
       <p class="text-xs font-mono mb-2" style="color:#2DD4BF">⚡ SMART-TAGS ERKANNT</p>
       <div id="smartTagChips" class="flex flex-wrap gap-1.5"></div>
@@ -286,6 +315,51 @@
   </div>
 </div>
 
+<!-- ═══ DRAWER MODAL ══════════════════════════════════════════════════════ -->
+<div id="drawerModal" class="modal-bg hidden">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-5">
+      <h3 id="drawerModalTitle" class="font-semibold text-lg">Neue Lade erstellen</h3>
+      <button onclick="closeModal('drawerModal')" class="text-muted hover:text-ink text-xl">×</button>
+    </div>
+    <div class="flex flex-col gap-3">
+      <div>
+        <label class="text-xs text-muted mb-1 block">Name der Lade *</label>
+        <input id="drawerName" class="ds-input" placeholder="z.B. Versicherungen">
+      </div>
+      <div>
+        <label class="text-xs text-muted mb-1 block">Beschreibung</label>
+        <input id="drawerDesc" class="ds-input" placeholder="Optional…">
+      </div>
+      <div>
+        <label class="text-xs text-muted mb-1 block">Symbol / Emoji</label>
+        <input id="drawerIcon" class="ds-input" placeholder="📁" style="font-size:18px">
+      </div>
+    </div>
+    <input type="hidden" id="drawerEditId">
+    <div class="flex gap-3 justify-end mt-5">
+      <button class="btn-ghost" onclick="closeModal('drawerModal')">Abbrechen</button>
+      <button class="btn-teal" onclick="saveDrawer()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MOVE FILE MODAL ═══════════════════════════════════════════════════ -->
+<div id="moveFileModal" class="modal-bg hidden">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-5">
+      <h3 class="font-semibold text-lg">📁 Dokument verschieben</h3>
+      <button onclick="closeModal('moveFileModal')" class="text-muted hover:text-ink text-xl">×</button>
+    </div>
+    <p id="moveFileLabel" class="text-sm mb-4" style="color:#6B7280"></p>
+    <div id="moveFileOptions" class="flex flex-col gap-2"></div>
+    <input type="hidden" id="moveFileId">
+    <div class="flex justify-end mt-5">
+      <button class="btn-ghost" onclick="closeModal('moveFileModal')">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ TOAST ══════════════════════════════════════════════════════════════ -->
 <div id="toast" class="fixed bottom-5 right-5 z-50 hidden">
   <div id="toastBox" class="px-4 py-3 rounded-lg text-sm font-medium shadow-lg" style="background:#1E2436;border:1px solid #2A3048"></div>
@@ -304,6 +378,8 @@ let S = {
   files: [], category: '', search: '', activeTag: '',
   sessionMaster: '',
   vaultEntries: [],
+  drawers: [],
+  activeDrawer: null,
 };
 
 // ─── Supabase Fetch ───────────────────────────────────────────────────────────
@@ -464,7 +540,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function init() {
   fetchFiles();
+  fetchDrawers();
   setInterval(fetchFiles, 60000);
+  setInterval(fetchDrawers, 120000);
 }
 
 // ─── Drag & Drop ──────────────────────────────────────────────────────────────
@@ -577,20 +655,23 @@ async function doUpload() {
       const fileUrl = `${SB_URL}/storage/v1/object/public/schrank-files/${path}`;
 
       // 2. Metadaten in DB speichern
+      const drawerId = document.getElementById('uploadDrawer').value || null;
+      const meta = {
+        user_id: S.userId,
+        name: file.name,
+        category: cat,
+        file_url: fileUrl,
+        storage_path: path,
+        mimetype: file.type || 'application/octet-stream',
+        size: file.size,
+        tags: allTags,
+        description: desc,
+      };
+      if (drawerId) meta.drawer_id = drawerId;
       await sb('schrank_files', {
         method: 'POST',
         prefer: 'return=minimal',
-        body: JSON.stringify({
-          user_id: S.userId,
-          name: file.name,
-          category: cat,
-          file_url: fileUrl,
-          storage_path: path,
-          mimetype: file.type || 'application/octet-stream',
-          size: file.size,
-          tags: allTags,
-          description: desc,
-        }),
+        body: JSON.stringify(meta),
       });
 
       done++;
@@ -616,6 +697,7 @@ function resetUploadModal() {
   document.getElementById('uploadDesc').value = '';
   document.getElementById('uploadProgress').classList.add('hidden');
   document.getElementById('uploadBar').style.width = '0%';
+  document.getElementById('uploadDrawer').value = '';
 }
 
 // ─── Dateien laden ────────────────────────────────────────────────────────────
@@ -627,6 +709,7 @@ async function fetchFiles() {
     renderFiles();
     updateCounts();
     buildTagCloud();
+    renderDrawers(); // refresh drawer counts
   } catch(e) { console.error(e); }
 }
 
@@ -654,6 +737,12 @@ function renderFiles() {
   vault.classList.add('hidden'); grid.classList.remove('hidden'); drop.classList.remove('hidden');
 
   let list = S.files;
+
+  // Filter by active drawer
+  if (S.activeDrawer) {
+    list = list.filter(f => f.drawer_id === S.activeDrawer);
+  }
+
   if (S.search) {
     const s = S.search.toLowerCase();
     list = list.filter(f =>
@@ -663,6 +752,28 @@ function renderFiles() {
     );
   }
   if (S.activeTag) list = list.filter(f => (f.tags||[]).includes(S.activeTag));
+
+  // Drawer header banner
+  const existingBanner = document.getElementById('drawerBanner');
+  if (existingBanner) existingBanner.remove();
+  if (S.activeDrawer) {
+    const drawer = S.drawers.find(d => d.id === S.activeDrawer);
+    if (drawer) {
+      const banner = document.createElement('div');
+      banner.id = 'drawerBanner';
+      banner.className = 'mb-4 flex items-center gap-3 px-4 py-3 rounded-lg';
+      banner.style.cssText = 'background:#2DD4BF0D;border:1px solid #2DD4BF22';
+      banner.innerHTML = `
+        <span style="font-size:22px">${esc(drawer.icon||'📁')}</span>
+        <div>
+          <p class="font-semibold">${esc(drawer.name)}</p>
+          ${drawer.description ? `<p class="text-xs" style="color:#6B7280">${esc(drawer.description)}</p>` : ''}
+        </div>
+        <span class="ml-auto text-xs font-mono" style="color:#2DD4BF">${list.length} Dokument${list.length!==1?'e':''}</span>
+      `;
+      grid.parentNode.insertBefore(banner, grid);
+    }
+  }
 
   if (!list.length) {
     grid.innerHTML = `<div class="col-span-3 py-12 text-center text-sm" style="color:#6B7280">Keine Dateien. Oben hochladen oder Filter anpassen.</div>`;
@@ -692,6 +803,7 @@ function fileCard(f) {
     <div class="flex gap-2 flex-wrap">
       ${isHtml && isLink ? `<button onclick="previewHtml('${esc(f.file_url)}','${esc(displayName)}')" style="background:#2DD4BF22;color:#2DD4BF;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;font-weight:600">👁 Vorschau</button>` : ''}
       ${isLink ? `<a href="${esc(f.file_url)}" target="_blank" style="background:#FFFFFF0A;color:#9CA3AF;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;text-decoration:none;display:inline-block">↗ Öffnen</a>` : ''}
+      ${S.drawers.length ? `<button onclick="showMoveFileModal('${f.id}','${esc(displayName)}')" style="background:#2A304822;color:#9CA3AF;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer" title="In Lade verschieben">📁</button>` : ''}
       <button onclick="deleteFile('${f.id}','${esc(f.storage_path)}','${esc(displayName)}')" style="background:#EF444411;color:#EF4444;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;margin-left:auto">✕</button>
     </div>
   </div>`;
@@ -713,9 +825,12 @@ function filterTag(tag) {
 }
 
 function setCategory(el, cat) {
-  S.category = cat; S.activeTag = '';
+  S.category = cat; S.activeTag = ''; S.activeDrawer = null;
   document.querySelectorAll('.sidebar-btn').forEach(b => b.classList.remove('tab-active'));
+  document.querySelectorAll('.drawer-btn').forEach(b => b.classList.remove('tab-active'));
   el.classList.add('tab-active');
+  const banner = document.getElementById('drawerBanner');
+  if (banner) banner.remove();
   if (cat === 'vault') { renderFiles(); return; }
   fetchFiles();
 }
@@ -838,11 +953,272 @@ async function delVault(id) {
   toast('Gelöscht.'); fetchVaultEntries();
 }
 
+// ─── DRAWER / LADEN ───────────────────────────────────────────────────────────
+async function fetchDrawers() {
+  try {
+    S.drawers = await sb(`schrank_drawers?user_id=eq.${S.userId}&order=sort_order.asc`);
+    renderDrawers();
+    populateDrawerDropdowns();
+  } catch(e) { console.error('fetchDrawers:', e); }
+}
+
+function renderDrawers() {
+  const list = document.getElementById('drawerList');
+  if (!S.drawers.length) {
+    list.innerHTML = `<p class="text-xs px-2 py-1" style="color:#2A3048">Noch keine Laden. + zum Erstellen.</p>`;
+    return;
+  }
+  list.innerHTML = S.drawers.map((d, i) => {
+    const count = S.files.filter(f => f.drawer_id === d.id).length;
+    const isActive = S.activeDrawer === d.id;
+    return `<div class="drawer-item" draggable="true" data-drawer-id="${d.id}" data-sort="${d.sort_order}"
+      ondragstart="drawerDragStart(event,'${d.id}')"
+      ondragover="drawerDragOver(event)"
+      ondragleave="drawerDragLeave(event)"
+      ondrop="drawerDrop(event,'${d.id}')">
+      <button class="drawer-btn ${isActive?'tab-active':''}" onclick="setActiveDrawer('${d.id}',this)">
+        <span class="drawer-drag-handle" title="Verschieben">⠿</span>
+        <span style="margin-right:4px">${esc(d.icon||'📁')}</span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.name)}</span>
+        <span class="ml-auto text-xs font-mono opacity-40 mr-1">${count}</span>
+        <span class="drawer-actions">
+          <button class="drawer-action-btn" onclick="event.stopPropagation();editDrawer('${d.id}')" title="Bearbeiten">✏️</button>
+          <button class="drawer-action-btn" onclick="event.stopPropagation();deleteDrawer('${d.id}','${esc(d.name)}')" title="Löschen">🗑️</button>
+        </span>
+      </button>
+    </div>`;
+  }).join('');
+}
+
+function populateDrawerDropdowns() {
+  const sel = document.getElementById('uploadDrawer');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Keine Lade</option>' +
+    S.drawers.map(d => `<option value="${d.id}" ${cur===d.id?'selected':''}>${esc(d.icon||'📁')} ${esc(d.name)}</option>`).join('');
+}
+
+function showDrawerModal(editId) {
+  const isEdit = !!editId;
+  document.getElementById('drawerModalTitle').textContent = isEdit ? 'Lade bearbeiten' : 'Neue Lade erstellen';
+  document.getElementById('drawerEditId').value = editId || '';
+  if (isEdit) {
+    const d = S.drawers.find(x => x.id === editId);
+    if (d) {
+      document.getElementById('drawerName').value = d.name || '';
+      document.getElementById('drawerDesc').value = d.description || '';
+      document.getElementById('drawerIcon').value = d.icon || '';
+    }
+  } else {
+    document.getElementById('drawerName').value = '';
+    document.getElementById('drawerDesc').value = '';
+    document.getElementById('drawerIcon').value = '';
+  }
+  document.getElementById('drawerModal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('drawerName').focus(), 100);
+}
+
+async function saveDrawer() {
+  const name = document.getElementById('drawerName').value.trim();
+  if (!name) { toast('Bitte einen Namen eingeben.', 'warn'); return; }
+  const desc  = document.getElementById('drawerDesc').value.trim();
+  const icon  = document.getElementById('drawerIcon').value.trim() || '📁';
+  const editId = document.getElementById('drawerEditId').value;
+
+  try {
+    if (editId) {
+      await sb(`schrank_drawers?id=eq.${editId}&user_id=eq.${S.userId}`, {
+        method: 'PATCH',
+        prefer: 'return=minimal',
+        body: JSON.stringify({ name, description: desc, icon }),
+      });
+      toast('Lade aktualisiert.');
+    } else {
+      const maxOrder = S.drawers.reduce((m, d) => Math.max(m, d.sort_order||0), 0);
+      await sb('schrank_drawers', {
+        method: 'POST',
+        prefer: 'return=minimal',
+        body: JSON.stringify({
+          user_id: S.userId, name, description: desc, icon,
+          sort_order: maxOrder + 1,
+        }),
+      });
+      toast('Lade erstellt!');
+    }
+    closeModal('drawerModal');
+    await fetchDrawers();
+  } catch(e) { toast('Fehler: ' + e.message, 'error'); }
+}
+
+function editDrawer(id) {
+  showDrawerModal(id);
+}
+
+async function deleteDrawer(id, name) {
+  const count = S.files.filter(f => f.drawer_id === id).length;
+  const msg = `Lade „${name}" wirklich löschen?\n\nDiese Lade enthält ${count} Dokument(e).\nDie Dokumente werden NICHT gelöscht, sondern nur aus der Lade entfernt.\n\nFortfahren?`;
+  if (!confirm(msg)) return;
+
+  // Optionally also delete documents
+  if (count > 0) {
+    const alsoDelete = confirm(`Sollen auch alle ${count} Dokument(e) in dieser Lade unwiderruflich gelöscht werden?\n\n„Abbrechen" = Nur Lade entfernen, Dokumente bleiben erhalten.\n„OK" = Lade UND Dokumente löschen.`);
+    if (alsoDelete) {
+      const docsInDrawer = S.files.filter(f => f.drawer_id === id);
+      for (const f of docsInDrawer) {
+        try {
+          await fetch(`${SB_URL}/storage/v1/object/schrank-files/${f.storage_path}`, {
+            method: 'DELETE',
+            headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token}` },
+          });
+          await sb(`schrank_files?id=eq.${f.id}`, { method: 'DELETE' });
+        } catch(e) { console.error('Fehler beim Löschen:', e); }
+      }
+    } else {
+      // Unassign drawer_id from files
+      try {
+        await sb(`schrank_files?drawer_id=eq.${id}&user_id=eq.${S.userId}`, {
+          method: 'PATCH',
+          prefer: 'return=minimal',
+          body: JSON.stringify({ drawer_id: null }),
+        });
+      } catch(e) { console.error(e); }
+    }
+  }
+
+  try {
+    await sb(`schrank_drawers?id=eq.${id}&user_id=eq.${S.userId}`, { method: 'DELETE' });
+    if (S.activeDrawer === id) {
+      S.activeDrawer = null;
+      const banner = document.getElementById('drawerBanner');
+      if (banner) banner.remove();
+    }
+    toast(`Lade „${name}" gelöscht.`);
+    await fetchDrawers();
+    await fetchFiles();
+  } catch(e) { toast('Fehler: ' + e.message, 'error'); }
+}
+
+function setActiveDrawer(id, el) {
+  if (S.activeDrawer === id) {
+    // Toggle off – show all
+    S.activeDrawer = null;
+    document.querySelectorAll('.drawer-btn').forEach(b => b.classList.remove('tab-active'));
+  } else {
+    S.activeDrawer = id;
+    S.category = ''; S.activeTag = '';
+    document.querySelectorAll('.sidebar-btn').forEach(b => b.classList.remove('tab-active'));
+    document.querySelectorAll('.drawer-btn').forEach(b => b.classList.remove('tab-active'));
+    el.classList.add('tab-active');
+  }
+  // Re-fetch to make sure counts etc are fresh, then render
+  fetchFiles();
+}
+
+// ─── Move File to Drawer ──────────────────────────────────────────────────────
+function showMoveFileModal(fileId, fileName) {
+  document.getElementById('moveFileId').value = fileId;
+  document.getElementById('moveFileLabel').textContent = `„${fileName}" verschieben nach:`;
+  const opts = document.getElementById('moveFileOptions');
+  const file = S.files.find(f => f.id === fileId);
+  const currentDrawer = file ? file.drawer_id : null;
+
+  opts.innerHTML = [{ id: '', name: 'Keine Lade', icon: '✖️' }, ...S.drawers].map(d => {
+    const isActive = (d.id === currentDrawer) || (!currentDrawer && d.id === '');
+    return `<button onclick="moveFileToDrawer('${fileId}','${d.id||''}')"
+      style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;border-radius:6px;border:1px solid ${isActive?'#2DD4BF':'#2A3048'};background:${isActive?'#2DD4BF11':'transparent'};color:#E8E4DC;cursor:pointer;font-size:14px">
+      <span>${esc(d.icon||'📁')}</span>
+      <span>${esc(d.name)}</span>
+      ${isActive ? '<span class="ml-auto text-xs font-mono" style="color:#2DD4BF">aktuell</span>' : ''}
+    </button>`;
+  }).join('');
+
+  document.getElementById('moveFileModal').classList.remove('hidden');
+}
+
+async function moveFileToDrawer(fileId, drawerId) {
+  try {
+    const body = drawerId ? { drawer_id: drawerId } : { drawer_id: null };
+    await sb(`schrank_files?id=eq.${fileId}&user_id=eq.${S.userId}`, {
+      method: 'PATCH',
+      prefer: 'return=minimal',
+      body: JSON.stringify(body),
+    });
+    closeModal('moveFileModal');
+    const drawer = drawerId ? S.drawers.find(d => d.id === drawerId) : null;
+    toast(drawer ? `In „${drawer.name}" verschoben.` : 'Aus Lade entfernt.');
+    await fetchFiles();
+  } catch(e) { toast('Fehler: ' + e.message, 'error'); }
+}
+
+// ─── Drag & Drop Laden-Sortierung ─────────────────────────────────────────────
+let _dragDrawerId = null;
+
+function drawerDragStart(e, id) {
+  _dragDrawerId = id;
+  e.target.closest('.drawer-item').classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function drawerDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const item = e.target.closest('.drawer-item');
+  if (!item || item.dataset.drawerId === _dragDrawerId) return;
+  document.querySelectorAll('.drawer-item').forEach(i => i.classList.remove('drag-over-top','drag-over-bottom'));
+  const rect = item.getBoundingClientRect();
+  const mid = rect.top + rect.height / 2;
+  item.classList.add(e.clientY < mid ? 'drag-over-top' : 'drag-over-bottom');
+}
+
+function drawerDragLeave(e) {
+  const item = e.target.closest('.drawer-item');
+  if (item) item.classList.remove('drag-over-top','drag-over-bottom');
+}
+
+async function drawerDrop(e, targetId) {
+  e.preventDefault();
+  document.querySelectorAll('.drawer-item').forEach(i => {
+    i.classList.remove('dragging','drag-over-top','drag-over-bottom');
+  });
+  if (!_dragDrawerId || _dragDrawerId === targetId) { _dragDrawerId = null; return; }
+
+  const fromIdx = S.drawers.findIndex(d => d.id === _dragDrawerId);
+  const toEl    = e.target.closest('.drawer-item');
+  const toIdx   = S.drawers.findIndex(d => d.id === targetId);
+  if (fromIdx === -1 || toIdx === -1) { _dragDrawerId = null; return; }
+
+  // Reorder in memory
+  const rect = toEl.getBoundingClientRect();
+  const insertBefore = e.clientY < rect.top + rect.height / 2;
+  const [moved] = S.drawers.splice(fromIdx, 1);
+  const newIdx = S.drawers.findIndex(d => d.id === targetId);
+  S.drawers.splice(insertBefore ? newIdx : newIdx + 1, 0, moved);
+
+  // Re-assign sort_order and persist
+  try {
+    for (let i = 0; i < S.drawers.length; i++) {
+      S.drawers[i].sort_order = i + 1;
+      await sb(`schrank_drawers?id=eq.${S.drawers[i].id}&user_id=eq.${S.userId}`, {
+        method: 'PATCH',
+        prefer: 'return=minimal',
+        body: JSON.stringify({ sort_order: i + 1 }),
+      });
+    }
+    renderDrawers();
+    populateDrawerDropdowns();
+  } catch(e) { toast('Sortierung konnte nicht gespeichert werden.', 'warn'); }
+  _dragDrawerId = null;
+}
+
 // ─── Hilfsfunktionen ──────────────────────────────────────────────────────────
 function showUploadModal(files) {
   if (S.category === 'vault') { showVaultNewModal(); return; }
   document.getElementById('uploadModal').classList.remove('hidden');
   if (S.category) document.getElementById('uploadCategory').value = S.category;
+  // Pre-select active drawer if there is one
+  const sel = document.getElementById('uploadDrawer');
+  if (S.activeDrawer && sel) sel.value = S.activeDrawer;
+  populateDrawerDropdowns();
 }
 function showVaultNewModal() { document.getElementById('vaultModal').classList.remove('hidden'); }
 function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
@@ -860,10 +1236,13 @@ function toast(msg, type='ok') {
 }
 
 document.addEventListener('click', e => {
-  ['uploadModal','vaultModal','detailModal'].forEach(id=>{
+  ['uploadModal','vaultModal','detailModal','drawerModal','moveFileModal'].forEach(id=>{
     if(e.target===document.getElementById(id)) closeModal(id);
   });
 });
+
+
+
 </script>
 </body>
 </html>
