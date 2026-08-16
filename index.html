@@ -382,18 +382,61 @@ let S = {
   activeDrawer: null,
 };
 
+// ─── Token Auto-Refresh ───────────────────────────────────────────────────────
+let _refreshToken = localStorage.getItem('ghd_refresh') || null;
+
+async function refreshSession() {
+  const rt = _refreshToken || localStorage.getItem('ghd_refresh');
+  if (!rt) {
+    toast('Session abgelaufen – bitte neu einloggen.', 'warn');
+    setTimeout(() => { localStorage.removeItem('ghd_token'); localStorage.removeItem('ghd_user'); location.reload(); }, 2000);
+    return;
+  }
+  try {
+    const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: rt }),
+    });
+    const d = await r.json();
+    if (d.access_token) {
+      S.token = d.access_token;
+      _refreshToken = d.refresh_token;
+      localStorage.setItem('ghd_token', d.access_token);
+      localStorage.setItem('ghd_refresh', d.refresh_token);
+    }
+  } catch(e) {
+    toast('Session abgelaufen – bitte neu einloggen.', 'warn');
+    setTimeout(() => { localStorage.removeItem('ghd_token'); localStorage.removeItem('ghd_user'); location.reload(); }, 2000);
+  }
+}
+
+// ─── Supabase Fetch ───────────────────────────────────────────────────────────
 // ─── Supabase Fetch ───────────────────────────────────────────────────────────
 async function sb(path, opts = {}) {
-  const headers = {
-    'apikey': SB_KEY,
-    'Authorization': `Bearer ${S.token || SB_KEY}`,
-    'Content-Type': 'application/json',
-    ...(opts.prefer ? { 'Prefer': opts.prefer } : {}),
+  const doFetch = async () => {
+    const headers = {
+      'apikey': SB_KEY,
+      'Authorization': `Bearer ${S.token || SB_KEY}`,
+      'Content-Type': 'application/json',
+      ...(opts.prefer ? { 'Prefer': opts.prefer } : {}),
+    };
+    const r = await fetch(`${SB_URL}/rest/v1/${path}`, { ...opts, headers });
+    const text = await r.text();
+    if (!r.ok) throw new Error(text);
+    return text ? JSON.parse(text) : [];
   };
-  const r = await fetch(`${SB_URL}/rest/v1/${path}`, { ...opts, headers });
-  const text = await r.text();
-  if (!r.ok) throw new Error(text);
-  return text ? JSON.parse(text) : [];
+
+  try {
+    return await doFetch();
+  } catch(e) {
+    // JWT abgelaufen → Token erneuern und nochmal versuchen
+    if (e.message && e.message.includes('JWT')) {
+      await refreshSession();
+      return await doFetch();
+    }
+    throw e;
+  }
 }
 
 async function sbAuth(endpoint, body) {
@@ -477,87 +520,7 @@ function detectCategory(filename) {
   return 'documents';
 }
 
-// ─── Token Auto-Refresh ───────────────────────────────────────────────────────
-let _refreshToken = null;
-
-async function refreshSession() {
-  if (!_refreshToken) return;
-  try {
-    const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=refresh_token`, {
-      method: 'POST',
-      headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: _refreshToken }),
-    });
-    const d = await r.json();
-    if (d.access_token) {
-      S.token = d.access_token;
-      _refreshToken = d.refresh_token;
-      localStorage.setItem('ghd_token', d.access_token);
-      localStorage.setItem('ghd_refresh', d.refresh_token);
-    }
-  } catch(e) { console.warn('Token-Refresh fehlgeschlagen:', e); }
-}
-
-// ─── Realtime Sync ────────────────────────────────────────────────────────────
-let _realtimeWs = null;
-let _realtimeReconnect = null;
-
-function startRealtime() {
-  if (_realtimeWs) return;
-
-  const wsUrl = `${SB_URL.replace('https','wss')}/realtime/v1/websocket?apikey=${SB_KEY}&vsn=1.0.0`;
-
-  function connect() {
-    _realtimeWs = new WebSocket(wsUrl);
-
-    _realtimeWs.onopen = () => {
-      // Join schrank_files channel
-      _realtimeWs.send(JSON.stringify({
-        topic: `realtime:public:schrank_files`,
-        event: 'phx_join',
-        payload: {},
-        ref: '1',
-      }));
-      // Join schrank_drawers channel
-      _realtimeWs.send(JSON.stringify({
-        topic: `realtime:public:schrank_drawers`,
-        event: 'phx_join',
-        payload: {},
-        ref: '2',
-      }));
-      // Heartbeat every 30s
-      setInterval(() => {
-        if (_realtimeWs && _realtimeWs.readyState === WebSocket.OPEN) {
-          _realtimeWs.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: '0' }));
-        }
-      }, 30000);
-    };
-
-    _realtimeWs.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data);
-        if (msg.event === 'INSERT' || msg.event === 'UPDATE' || msg.event === 'DELETE') {
-          const table = msg.topic?.includes('schrank_drawers') ? 'drawers' : 'files';
-          if (table === 'files') fetchFiles();
-          if (table === 'drawers') fetchDrawers();
-        }
-      } catch(err) {}
-    };
-
-    _realtimeWs.onclose = () => {
-      _realtimeWs = null;
-      // Reconnect nach 5 Sekunden
-      clearTimeout(_realtimeReconnect);
-      _realtimeReconnect = setTimeout(connect, 5000);
-    };
-
-    _realtimeWs.onerror = () => { _realtimeWs?.close(); };
-  }
-
-  connect();
-}
-
-
+// ─── Auth ─────────────────────────────────────────────────────────────────────
 async function doLogin() {
   const email = document.getElementById('loginEmail').value.trim();
   const pw    = document.getElementById('loginPassword').value;
@@ -602,8 +565,6 @@ function showRegister() {
 function doLogout() {
   localStorage.removeItem('ghd_token');
   localStorage.removeItem('ghd_user');
-  localStorage.removeItem('ghd_refresh');
-  if (_realtimeWs) { _realtimeWs.close(); _realtimeWs = null; }
   location.reload();
 }
 
@@ -612,10 +573,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Auto-Login aus localStorage
   const t = localStorage.getItem('ghd_token');
   const u = localStorage.getItem('ghd_user');
-  const rt = localStorage.getItem('ghd_refresh');
   if (t && u) {
     S.token = t; S.userId = u;
-    if (rt) _refreshToken = rt;
     document.getElementById('loginScreen').style.display = 'none';
     init();
   }
@@ -627,10 +586,6 @@ document.addEventListener('DOMContentLoaded', () => {
 function init() {
   fetchFiles();
   fetchDrawers();
-  startRealtime();
-  // Token alle 50 Minuten erneuern (läuft nach 60 Min ab)
-  setInterval(refreshSession, 50 * 60 * 1000);
-  // Fallback-Polling alle 60s falls Realtime nicht verfügbar
   setInterval(fetchFiles, 60000);
   setInterval(fetchDrawers, 120000);
 }
