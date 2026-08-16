@@ -66,7 +66,7 @@
   .drawer-btn:hover{background:#1E2436}
   .drawer-btn.tab-active{background:#2DD4BF11;color:#2DD4BF}
   .drawer-btn:hover .drawer-actions{opacity:1}
-  .drawer-actions{opacity:1;display:flex;gap:2px;margin-left:auto}
+  .drawer-actions{opacity:0;transition:opacity .15s;display:flex;gap:2px;margin-left:auto}
   .drawer-action-btn{background:none;border:none;cursor:pointer;color:#6B7280;font-size:11px;padding:2px 4px;border-radius:3px;line-height:1}
   .drawer-action-btn:hover{background:#2A3048;color:#E8E4DC}
   .drawer-drag-handle{cursor:grab;color:#2A3048;font-size:10px;padding:0 2px}
@@ -477,7 +477,87 @@ function detectCategory(filename) {
   return 'documents';
 }
 
-// ─── Auth ─────────────────────────────────────────────────────────────────────
+// ─── Token Auto-Refresh ───────────────────────────────────────────────────────
+let _refreshToken = null;
+
+async function refreshSession() {
+  if (!_refreshToken) return;
+  try {
+    const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: _refreshToken }),
+    });
+    const d = await r.json();
+    if (d.access_token) {
+      S.token = d.access_token;
+      _refreshToken = d.refresh_token;
+      localStorage.setItem('ghd_token', d.access_token);
+      localStorage.setItem('ghd_refresh', d.refresh_token);
+    }
+  } catch(e) { console.warn('Token-Refresh fehlgeschlagen:', e); }
+}
+
+// ─── Realtime Sync ────────────────────────────────────────────────────────────
+let _realtimeWs = null;
+let _realtimeReconnect = null;
+
+function startRealtime() {
+  if (_realtimeWs) return;
+
+  const wsUrl = `${SB_URL.replace('https','wss')}/realtime/v1/websocket?apikey=${SB_KEY}&vsn=1.0.0`;
+
+  function connect() {
+    _realtimeWs = new WebSocket(wsUrl);
+
+    _realtimeWs.onopen = () => {
+      // Join schrank_files channel
+      _realtimeWs.send(JSON.stringify({
+        topic: `realtime:public:schrank_files`,
+        event: 'phx_join',
+        payload: {},
+        ref: '1',
+      }));
+      // Join schrank_drawers channel
+      _realtimeWs.send(JSON.stringify({
+        topic: `realtime:public:schrank_drawers`,
+        event: 'phx_join',
+        payload: {},
+        ref: '2',
+      }));
+      // Heartbeat every 30s
+      setInterval(() => {
+        if (_realtimeWs && _realtimeWs.readyState === WebSocket.OPEN) {
+          _realtimeWs.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: '0' }));
+        }
+      }, 30000);
+    };
+
+    _realtimeWs.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.event === 'INSERT' || msg.event === 'UPDATE' || msg.event === 'DELETE') {
+          const table = msg.topic?.includes('schrank_drawers') ? 'drawers' : 'files';
+          if (table === 'files') fetchFiles();
+          if (table === 'drawers') fetchDrawers();
+        }
+      } catch(err) {}
+    };
+
+    _realtimeWs.onclose = () => {
+      _realtimeWs = null;
+      // Reconnect nach 5 Sekunden
+      clearTimeout(_realtimeReconnect);
+      _realtimeReconnect = setTimeout(connect, 5000);
+    };
+
+    _realtimeWs.onerror = () => { _realtimeWs?.close(); };
+  }
+
+  connect();
+}
+
+
 async function doLogin() {
   const email = document.getElementById('loginEmail').value.trim();
   const pw    = document.getElementById('loginPassword').value;
@@ -486,8 +566,10 @@ async function doLogin() {
     const d = await sbAuth('token?grant_type=password', { email, password: pw });
     S.token  = d.access_token;
     S.userId = d.user.id;
+    _refreshToken = d.refresh_token;
     localStorage.setItem('ghd_token', d.access_token);
     localStorage.setItem('ghd_user',  d.user.id);
+    localStorage.setItem('ghd_refresh', d.refresh_token);
     document.getElementById('loginScreen').style.display = 'none';
     init();
   } catch(e) {
@@ -520,6 +602,8 @@ function showRegister() {
 function doLogout() {
   localStorage.removeItem('ghd_token');
   localStorage.removeItem('ghd_user');
+  localStorage.removeItem('ghd_refresh');
+  if (_realtimeWs) { _realtimeWs.close(); _realtimeWs = null; }
   location.reload();
 }
 
@@ -528,8 +612,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Auto-Login aus localStorage
   const t = localStorage.getItem('ghd_token');
   const u = localStorage.getItem('ghd_user');
+  const rt = localStorage.getItem('ghd_refresh');
   if (t && u) {
     S.token = t; S.userId = u;
+    if (rt) _refreshToken = rt;
     document.getElementById('loginScreen').style.display = 'none';
     init();
   }
@@ -541,6 +627,10 @@ document.addEventListener('DOMContentLoaded', () => {
 function init() {
   fetchFiles();
   fetchDrawers();
+  startRealtime();
+  // Token alle 50 Minuten erneuern (läuft nach 60 Min ab)
+  setInterval(refreshSession, 50 * 60 * 1000);
+  // Fallback-Polling alle 60s falls Realtime nicht verfügbar
   setInterval(fetchFiles, 60000);
   setInterval(fetchDrawers, 120000);
 }
@@ -803,7 +893,7 @@ function fileCard(f) {
     <div class="flex gap-2 flex-wrap">
       ${isHtml && isLink ? `<button onclick="previewHtml('${esc(f.file_url)}','${esc(displayName)}')" style="background:#2DD4BF22;color:#2DD4BF;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;font-weight:600">👁 Vorschau</button>` : ''}
       ${isLink ? `<a href="${esc(f.file_url)}" target="_blank" style="background:#FFFFFF0A;color:#9CA3AF;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;text-decoration:none;display:inline-block">↗ Öffnen</a>` : ''}
-      <button onclick="showMoveFileModal('${f.id}','${esc(displayName)}')" style="background:#2A304822;color:#9CA3AF;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer" title="In Lade verschieben">📁</button>
+      ${S.drawers.length ? `<button onclick="showMoveFileModal('${f.id}','${esc(displayName)}')" style="background:#2A304822;color:#9CA3AF;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer" title="In Lade verschieben">📁</button>` : ''}
       <button onclick="deleteFile('${f.id}','${esc(f.storage_path)}','${esc(displayName)}')" style="background:#EF444411;color:#EF4444;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;margin-left:auto">✕</button>
     </div>
   </div>`;
