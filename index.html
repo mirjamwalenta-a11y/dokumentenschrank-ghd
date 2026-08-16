@@ -848,7 +848,7 @@ function fileCard(f) {
     <div class="flex gap-2 flex-wrap">
       ${isHtml && isLink ? `<button onclick="previewHtml('${esc(f.file_url)}','${esc(displayName)}')" style="background:#2DD4BF22;color:#2DD4BF;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;font-weight:600">👁 Vorschau</button>` : ''}
       ${isLink ? `<a href="${esc(f.file_url)}" target="_blank" style="background:#FFFFFF0A;color:#9CA3AF;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;text-decoration:none;display:inline-block">↗ Öffnen</a>` : ''}
-      ${S.drawers.length ? `<button onclick="showMoveFileModal('${f.id}','${esc(displayName)}')" style="background:#2A304822;color:#9CA3AF;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer" title="In Lade verschieben">📁</button>` : ''}
+      <button onclick="showMoveFileModal('${f.id}','${esc(displayName)}')" style="background:#2DD4BF22;color:#2DD4BF;border:1px solid #2DD4BF44;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer" title="In Lade verschieben">📁 Lade</button>
       <button onclick="deleteFile('${f.id}','${esc(f.storage_path)}','${esc(displayName)}')" style="background:#EF444411;color:#EF4444;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;margin-left:auto">✕</button>
     </div>
   </div>`;
