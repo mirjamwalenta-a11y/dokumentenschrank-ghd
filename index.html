@@ -66,7 +66,7 @@
   .drawer-btn:hover{background:#1E2436}
   .drawer-btn.tab-active{background:#2DD4BF11;color:#2DD4BF}
   .drawer-btn:hover .drawer-actions{opacity:1}
-  .drawer-actions{opacity:0;transition:opacity .15s;display:flex;gap:2px;margin-left:auto}
+  .drawer-actions{opacity:1;display:flex;gap:2px;margin-left:auto}
   .drawer-action-btn{background:none;border:none;cursor:pointer;color:#6B7280;font-size:11px;padding:2px 4px;border-radius:3px;line-height:1}
   .drawer-action-btn:hover{background:#2A3048;color:#E8E4DC}
   .drawer-drag-handle{cursor:grab;color:#2A3048;font-size:10px;padding:0 2px}
@@ -803,7 +803,7 @@ function fileCard(f) {
     <div class="flex gap-2 flex-wrap">
       ${isHtml && isLink ? `<button onclick="previewHtml('${esc(f.file_url)}','${esc(displayName)}')" style="background:#2DD4BF22;color:#2DD4BF;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;font-weight:600">👁 Vorschau</button>` : ''}
       ${isLink ? `<a href="${esc(f.file_url)}" target="_blank" style="background:#FFFFFF0A;color:#9CA3AF;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;text-decoration:none;display:inline-block">↗ Öffnen</a>` : ''}
-      ${S.drawers.length ? `<button onclick="showMoveFileModal('${f.id}','${esc(displayName)}')" style="background:#2A304822;color:#9CA3AF;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer" title="In Lade verschieben">📁</button>` : ''}
+      <button onclick="showMoveFileModal('${f.id}','${esc(displayName)}')" style="background:#2A304822;color:#9CA3AF;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer" title="In Lade verschieben">📁</button>
       <button onclick="deleteFile('${f.id}','${esc(f.storage_path)}','${esc(displayName)}')" style="background:#EF444411;color:#EF4444;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;margin-left:auto">✕</button>
     </div>
   </div>`;
