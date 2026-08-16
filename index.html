@@ -786,6 +786,9 @@ function renderFiles() {
   // Filter by active drawer
   if (S.activeDrawer) {
     list = list.filter(f => f.drawer_id === S.activeDrawer);
+  } else {
+    // In der Hauptansicht: Dateien die in einer Lade sind ausblenden
+    list = list.filter(f => !f.drawer_id);
   }
 
   if (S.search) {
@@ -1027,12 +1030,28 @@ function renderDrawers() {
         <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.name)}</span>
         <span class="ml-auto text-xs font-mono opacity-40 mr-1">${count}</span>
         <span class="drawer-actions">
+          <button class="drawer-action-btn" onclick="event.stopPropagation();uploadToDrawer('${d.id}')" title="Hochladen">⬆️</button>
           <button class="drawer-action-btn" onclick="event.stopPropagation();editDrawer('${d.id}')" title="Bearbeiten">✏️</button>
           <button class="drawer-action-btn" onclick="event.stopPropagation();deleteDrawer('${d.id}','${esc(d.name)}')" title="Löschen">🗑️</button>
         </span>
       </button>
     </div>`;
   }).join('');
+}
+
+function uploadToDrawer(drawerId) {
+  // Lade aktivieren und Upload-Modal öffnen mit vorausgewählter Lade
+  S.activeDrawer = drawerId;
+  document.querySelectorAll('.sidebar-btn').forEach(b => b.classList.remove('tab-active'));
+  document.querySelectorAll('.drawer-btn').forEach(b => b.classList.remove('tab-active'));
+  renderDrawers();
+  showUploadModal();
+  // Kurz warten bis Modal offen, dann Lade vorauswählen
+  setTimeout(() => {
+    populateDrawerDropdowns();
+    const sel = document.getElementById('uploadDrawer');
+    if (sel) sel.value = drawerId;
+  }, 50);
 }
 
 function populateDrawerDropdowns() {
