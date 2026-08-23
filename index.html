@@ -727,7 +727,27 @@ async function doUpload() {
     }
   }
 
-  if (done > 0) toast(`${done} Datei(en) hochgeladen!`);
+  if (done > 0) {
+    toast(`${done} Datei(en) hochgeladen!`);
+    // ── GHD-EREIGNIS bei wichtigen Dokumenten ─────────────────────
+    const wichtigeTags = ['#Rechnung', '#Vertrag', '#Steuer', '#Versicherung', '#Zugang'];
+    const hatWichtigTag = allTags.some(t => wichtigeTags.includes(t));
+    if (hatWichtigTag) {
+      const tagLabel = allTags.filter(t => wichtigeTags.includes(t)).join(', ');
+      const dateiName = filesToUpload[0] ? filesToUpload[0].name : 'Dokument';
+      fetch(`${SB_URL}/rest/v1/ghd_ereignisse`, {
+        method: 'POST',
+        headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        body: JSON.stringify({
+          app: 'Schrank',
+          typ: 'dokument_hochgeladen',
+          titel: `Neues Dokument im Schrank: ${dateiName} (${tagLabel})`,
+          prioritaet: 'diese-woche',
+          gelesen: false,
+        })
+      }).catch(() => {});
+    }
+  }
   closeModal('uploadModal');
   resetUploadModal();
   fetchFiles();
