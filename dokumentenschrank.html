@@ -168,6 +168,9 @@
       <button class="sidebar-btn" data-cat="vault" onclick="setCategory(this,'vault')">
         <span class="cat-vault">🔐 Tresor</span>
       </button>
+      <button class="sidebar-btn" data-cat="reminders" onclick="setCategory(this,'reminders')">
+        <span style="color:#F97316">⏰ Fristen</span><span id="cnt-reminders" class="ml-auto text-xs font-mono opacity-50">—</span>
+      </button>
     </nav>
     <div class="mt-6">
       <div class="drawer-header-area">
@@ -210,6 +213,25 @@
         <button class="btn-amber text-xs py-1.5 px-3" onclick="unlockSession()">Entsperren</button>
       </div>
       <div id="vaultGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+    </div>
+
+    <!-- FRISTEN / ERINNERUNGEN -->
+    <div id="reminderView" class="hidden">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">⏰</span>
+          <h2 class="font-semibold">Fristen & Erinnerungen</h2>
+        </div>
+        <button style="background:#F97316;color:#fff;font-weight:600;border-radius:6px;padding:8px 16px;font-size:14px;cursor:pointer;border:none" onclick="showReminderModal()">+ Neue Frist</button>
+      </div>
+
+      <!-- Fällig-bald-Banner -->
+      <div id="reminderAlertBanner" class="hidden mb-4 p-3 rounded-lg flex items-center gap-3" style="background:#F9731611;border:1px solid #F9731633">
+        <span style="color:#F97316;font-size:18px">⚠️</span>
+        <p id="reminderAlertText" class="text-sm" style="color:#F97316"></p>
+      </div>
+
+      <div id="reminderGrid" class="flex flex-col gap-3"></div>
     </div>
   </main>
 </div>
@@ -360,6 +382,84 @@
   </div>
 </div>
 
+<!-- ═══ FRIST / ERINNERUNG MODAL ══════════════════════════════════════════ -->
+<!--
+  SQL (einmalig in Supabase SQL Editor ausführen):
+
+  create table if not exists public.dokumentenschrank_erinnerungen (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid references auth.users not null,
+    title text not null,
+    category text default 'Allgemein',
+    due_date date not null,
+    reminder_days_before integer default 7,
+    remind_at date not null,
+    repeat_interval_months integer default 0,
+    status text default 'pending',
+    created_at timestamp with time zone default now()
+  );
+  alter table public.dokumentenschrank_erinnerungen enable row level security;
+  create policy "Eigene Eintraege" on public.dokumentenschrank_erinnerungen
+    for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+-->
+<div id="reminderModal" class="modal-bg hidden">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-5">
+      <h3 class="font-semibold text-lg flex items-center gap-2">⏰ Neue Frist</h3>
+      <button onclick="closeModal('reminderModal')" class="text-muted hover:text-ink text-xl">×</button>
+    </div>
+    <div class="flex flex-col gap-3">
+      <div>
+        <label class="text-xs text-muted mb-1 block">Bezeichnung *</label>
+        <input id="remTitle" class="ds-input" placeholder="z.B. Elektrobefund, Miele Service, Probezeit Lehrling">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-muted mb-1 block">Kategorie</label>
+          <select id="remCategory" class="ds-input">
+            <option value="Allgemein">Allgemein</option>
+            <option value="Behörden & Recht">Behörden & Recht</option>
+            <option value="Geräte & Wartung">Geräte & Wartung</option>
+            <option value="Personal">Personal</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-muted mb-1 block">Fällig am *</label>
+          <input id="remDueDate" type="date" class="ds-input">
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-muted mb-1 block">Erinnerung wie viele Tage vorher?</label>
+          <select id="remDaysBefore" class="ds-input">
+            <option value="3">3 Tage</option>
+            <option value="7" selected>1 Woche</option>
+            <option value="14">2 Wochen</option>
+            <option value="30">1 Monat</option>
+            <option value="60">2 Monate</option>
+            <option value="90">3 Monate</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-muted mb-1 block">Wiederholen?</label>
+          <select id="remRepeat" class="ds-input">
+            <option value="0">Einmalig</option>
+            <option value="12">Jährlich</option>
+            <option value="24">Alle 2 Jahre</option>
+            <option value="36">Alle 3 Jahre</option>
+            <option value="60">Alle 5 Jahre</option>
+          </select>
+        </div>
+      </div>
+      <div id="remPreview" class="hidden p-3 rounded-lg text-xs font-mono" style="background:#F9731611;border:1px solid #F9731633;color:#F97316"></div>
+    </div>
+    <div class="flex gap-3 justify-end mt-5">
+      <button class="btn-ghost" onclick="closeModal('reminderModal')">Abbrechen</button>
+      <button style="background:#F97316;color:#fff;font-weight:600;border-radius:6px;padding:8px 16px;font-size:14px;cursor:pointer;border:none" onclick="saveReminder()">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ TOAST ══════════════════════════════════════════════════════════════ -->
 <div id="toast" class="fixed bottom-5 right-5 z-50 hidden">
   <div id="toastBox" class="px-4 py-3 rounded-lg text-sm font-medium shadow-lg" style="background:#1E2436;border:1px solid #2A3048"></div>
@@ -380,6 +480,7 @@ let S = {
   vaultEntries: [],
   drawers: [],
   activeDrawer: null,
+  reminders: [],
 };
 
 // ─── Token Auto-Refresh ───────────────────────────────────────────────────────
@@ -586,8 +687,10 @@ document.addEventListener('DOMContentLoaded', () => {
 function init() {
   fetchFiles();
   fetchDrawers();
+  fetchReminders();
   setInterval(fetchFiles, 60000);
   setInterval(fetchDrawers, 120000);
+  setInterval(fetchReminders, 120000);
 }
 
 // ─── Drag & Drop ──────────────────────────────────────────────────────────────
@@ -793,13 +896,22 @@ function renderFiles() {
   const vault = document.getElementById('vaultView');
   const drop  = document.getElementById('dropZone');
 
+  const reminderView = document.getElementById('reminderView');
+
   if (S.category === 'vault') {
     grid.classList.add('hidden'); drop.classList.add('hidden');
-    vault.classList.remove('hidden');
+    vault.classList.remove('hidden'); reminderView.classList.add('hidden');
     fetchVaultEntries();
     return;
   }
-  vault.classList.add('hidden'); grid.classList.remove('hidden'); drop.classList.remove('hidden');
+  if (S.category === 'reminders') {
+    grid.classList.add('hidden'); drop.classList.add('hidden');
+    vault.classList.add('hidden'); reminderView.classList.remove('hidden');
+    fetchReminders();
+    return;
+  }
+  vault.classList.add('hidden'); reminderView.classList.add('hidden');
+  grid.classList.remove('hidden'); drop.classList.remove('hidden');
 
   let list = S.files;
 
@@ -1320,7 +1432,7 @@ function toast(msg, type='ok') {
 }
 
 document.addEventListener('click', e => {
-  ['uploadModal','vaultModal','detailModal','drawerModal','moveFileModal'].forEach(id=>{
+  ['uploadModal','vaultModal','detailModal','drawerModal','moveFileModal','reminderModal'].forEach(id=>{
     if(e.target===document.getElementById(id)) closeModal(id);
   });
 });
@@ -1328,6 +1440,198 @@ document.addEventListener('click', e => {
 
 
 </script>
+<script>
+// ─── FRISTEN / ERINNERUNGEN ───────────────────────────────────────────────────
+
+async function fetchReminders() {
+  try {
+    const rows = await sb(
+      `dokumentenschrank_erinnerungen?user_id=eq.${S.userId}&order=due_date.asc`
+    );
+    S.reminders = rows;
+    renderReminders();
+    updateReminderCount();
+  } catch(e) { console.error('fetchReminders:', e); }
+}
+
+function updateReminderCount() {
+  const el = document.getElementById('cnt-reminders');
+  if (el && S.reminders) el.textContent = S.reminders.length;
+}
+
+function renderReminders() {
+  const grid = document.getElementById('reminderGrid');
+  if (!grid) return;
+  if (!S.reminders || !S.reminders.length) {
+    grid.innerHTML = `<div class="py-12 text-center text-sm" style="color:#6B7280">Noch keine Fristen. „+ Neue Frist" um zu starten.</div>`;
+    document.getElementById('reminderAlertBanner').classList.add('hidden');
+    return;
+  }
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const in14  = new Date(today); in14.setDate(today.getDate() + 14);
+
+  // Alert-Banner: wie viele sind in den nächsten 14 Tagen fällig?
+  const bald = S.reminders.filter(r => {
+    const rd = new Date(r.remind_at); rd.setHours(0,0,0,0);
+    return rd <= in14 && r.status !== 'resolved';
+  });
+  const alertBanner = document.getElementById('reminderAlertBanner');
+  const alertText   = document.getElementById('reminderAlertText');
+  if (bald.length) {
+    alertText.textContent = `${bald.length} Frist${bald.length > 1 ? 'en' : ''} in den nächsten 14 Tagen fällig!`;
+    alertBanner.classList.remove('hidden');
+  } else {
+    alertBanner.classList.add('hidden');
+  }
+
+  // Karten rendern
+  const CAT_COLOR = {
+    'Behörden & Recht': '#60A5FA',
+    'Geräte & Wartung': '#2DD4BF',
+    'Personal':         '#A78BFA',
+    'Allgemein':        '#9CA3AF',
+  };
+  const STATUS_LABEL = { pending: 'Offen', sent: 'Erinnert', resolved: 'Erledigt' };
+
+  grid.innerHTML = S.reminders.map(r => {
+    const dueDate    = new Date(r.due_date + 'T00:00:00');
+    const remindDate = new Date(r.remind_at + 'T00:00:00');
+    const catColor   = CAT_COLOR[r.category] || '#9CA3AF';
+    const isDue      = remindDate <= today && r.status !== 'resolved';
+    const isResolved = r.status === 'resolved';
+    const repeatLabel = r.repeat_interval_months > 0
+      ? `Wiederholt alle ${r.repeat_interval_months} Monate`
+      : 'Einmalig';
+
+    return `<div style="background:#1E2436;border:1px solid ${isDue ? '#F9731666' : '#2A3048'};border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px;opacity:${isResolved ? '.55' : '1'}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+            <span style="font-size:11px;font-family:monospace;padding:2px 8px;border-radius:4px;background:${catColor}22;color:${catColor}">${esc(r.category)}</span>
+            ${isDue ? '<span style="font-size:11px;font-family:monospace;padding:2px 8px;border-radius:4px;background:#F9731622;color:#F97316">⚠️ JETZT FÄLLIG</span>' : ''}
+            ${isResolved ? '<span style="font-size:11px;font-family:monospace;padding:2px 8px;border-radius:4px;background:#10B98122;color:#10B981">✓ ERLEDIGT</span>' : ''}
+          </div>
+          <p style="font-weight:600;font-size:15px;margin-bottom:4px">${esc(r.title)}</p>
+          <p style="font-size:12px;color:#6B7280;font-family:monospace">
+            Fällig: ${dueDate.toLocaleDateString('de-AT')} &nbsp;·&nbsp;
+            Erinnerung: ${remindDate.toLocaleDateString('de-AT')} &nbsp;·&nbsp;
+            ${repeatLabel}
+          </p>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          ${!isResolved ? `<button onclick="resolveReminder('${r.id}')" style="background:#10B98122;color:#10B981;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer" title="Als erledigt markieren">✓</button>` : ''}
+          <button onclick="deleteReminder('${r.id}','${esc(r.title)}')" style="background:#EF444411;color:#EF4444;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer" title="Löschen">✕</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function showReminderModal() {
+  // Heute als Standard-Datum setzen
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('remDueDate').value = today;
+  document.getElementById('remTitle').value = '';
+  document.getElementById('remCategory').value = 'Allgemein';
+  document.getElementById('remDaysBefore').value = '7';
+  document.getElementById('remRepeat').value = '0';
+  document.getElementById('remPreview').classList.add('hidden');
+  document.getElementById('reminderModal').classList.remove('hidden');
+
+  // Vorschau aktualisieren wenn Datum geändert wird
+  ['remDueDate','remDaysBefore'].forEach(id => {
+    document.getElementById(id).addEventListener('change', updateReminderPreview);
+  });
+}
+
+function updateReminderPreview() {
+  const due   = document.getElementById('remDueDate').value;
+  const days  = parseInt(document.getElementById('remDaysBefore').value);
+  const prev  = document.getElementById('remPreview');
+  if (!due) { prev.classList.add('hidden'); return; }
+  const dueDate = new Date(due + 'T00:00:00');
+  const remDate = new Date(dueDate);
+  remDate.setDate(remDate.getDate() - days);
+  prev.textContent = `Erinnerung erscheint am: ${remDate.toLocaleDateString('de-AT')} (${days} Tage vor ${dueDate.toLocaleDateString('de-AT')})`;
+  prev.classList.remove('hidden');
+}
+
+async function saveReminder() {
+  const title   = document.getElementById('remTitle').value.trim();
+  const dueStr  = document.getElementById('remDueDate').value;
+  const days    = parseInt(document.getElementById('remDaysBefore').value);
+  const repeat  = parseInt(document.getElementById('remRepeat').value);
+  const cat     = document.getElementById('remCategory').value;
+
+  if (!title)  { toast('Bezeichnung fehlt.', 'warn'); return; }
+  if (!dueStr) { toast('Fälligkeitsdatum fehlt.', 'warn'); return; }
+
+  // remind_at berechnen
+  const dueDate  = new Date(dueStr + 'T00:00:00');
+  const remDate  = new Date(dueDate);
+  remDate.setDate(remDate.getDate() - days);
+  const remStr   = remDate.toISOString().split('T')[0];
+
+  try {
+    await sb('dokumentenschrank_erinnerungen', {
+      method: 'POST',
+      prefer: 'return=minimal',
+      body: JSON.stringify({
+        user_id:                S.userId,
+        title,
+        category:               cat,
+        due_date:               dueStr,
+        reminder_days_before:   days,
+        remind_at:              remStr,
+        repeat_interval_months: repeat,
+        status:                 'pending',
+      }),
+    });
+    toast(`Frist „${title}" gespeichert! Erinnerung am ${remDate.toLocaleDateString('de-AT')}.`);
+    closeModal('reminderModal');
+    fetchReminders();
+
+    // GHD-Ereignis schreiben (Behörden & Recht / Geräte besonders wichtig)
+    const wichtig = ['Behörden & Recht','Geräte & Wartung'].includes(cat);
+    if (wichtig) {
+      fetch(`${SB_URL}/rest/v1/ghd_ereignisse`, {
+        method: 'POST',
+        headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        body: JSON.stringify({
+          app: 'Schrank',
+          typ: 'frist_angelegt',
+          titel: `Neue Frist: ${title} (fällig ${dueDate.toLocaleDateString('de-AT')})`,
+          prioritaet: 'diese-woche',
+          gelesen: false,
+        })
+      }).catch(() => {});
+    }
+  } catch(e) { toast('Fehler: ' + e.message, 'error'); }
+}
+
+async function resolveReminder(id) {
+  try {
+    await sb(`dokumentenschrank_erinnerungen?id=eq.${id}&user_id=eq.${S.userId}`, {
+      method: 'PATCH',
+      prefer: 'return=minimal',
+      body: JSON.stringify({ status: 'resolved' }),
+    });
+    toast('Als erledigt markiert.');
+    fetchReminders();
+  } catch(e) { toast('Fehler: ' + e.message, 'error'); }
+}
+
+async function deleteReminder(id, name) {
+  if (!confirm(`Frist „${name}" wirklich löschen?`)) return;
+  try {
+    await sb(`dokumentenschrank_erinnerungen?id=eq.${id}&user_id=eq.${S.userId}`, { method: 'DELETE' });
+    toast(`„${name}" gelöscht.`);
+    fetchReminders();
+  } catch(e) { toast('Fehler: ' + e.message, 'error'); }
+}
+</script>
+
 <script>
 // ── Wörni / Claude – sicherer Proxy ──
 async function claudeAnfrage(system, userText, maxTokens) {
