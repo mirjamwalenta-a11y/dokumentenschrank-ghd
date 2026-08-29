@@ -840,7 +840,7 @@ async function doUpload() {
       const dateiName = filesToUpload[0] ? filesToUpload[0].name : 'Dokument';
       fetch(`${SB_URL}/rest/v1/ghd_ereignisse`, {
         method: 'POST',
-        headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token || SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
         body: JSON.stringify({
           app: 'Schrank',
           typ: 'dokument_hochgeladen',
@@ -1597,7 +1597,7 @@ async function saveReminder() {
     if (wichtig) {
       fetch(`${SB_URL}/rest/v1/ghd_ereignisse`, {
         method: 'POST',
-        headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token || SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
         body: JSON.stringify({
           app: 'Schrank',
           typ: 'frist_angelegt',
@@ -1636,9 +1636,12 @@ async function deleteReminder(id, name) {
 // ── Wörni / Claude – sicherer Proxy ──
 async function claudeAnfrage(system, userText, maxTokens) {
   maxTokens = maxTokens || 400;
-  const res = await fetch('https://wrxlaltgtgkdomklgrlj.supabase.co/functions/v1/rapid-service', {
+  const res = await fetch('https://wrxlaltgtgkdomklgrlj.supabase.co/functions/v1/rapid-function', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(S.token ? { 'Authorization': 'Bearer ' + S.token } : {})
+    },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
       max_tokens: maxTokens,
