@@ -395,20 +395,31 @@
     reminder_days_before integer default 7,
     remind_at date not null,
     repeat_interval_months integer default 0,
+    last_done_date date,
     status text default 'pending',
     created_at timestamp with time zone default now()
   );
   alter table public.dokumentenschrank_erinnerungen enable row level security;
   create policy "Eigene Eintraege" on public.dokumentenschrank_erinnerungen
     for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+  -- Falls die Tabelle schon existiert (Migration für bestehende Installationen):
+  alter table public.dokumentenschrank_erinnerungen
+    add column if not exists last_done_date date;
 -->
 <div id="reminderModal" class="modal-bg hidden">
   <div class="modal-box">
     <div class="flex items-center justify-between mb-5">
-      <h3 class="font-semibold text-lg flex items-center gap-2">⏰ Neue Frist</h3>
+      <h3 id="reminderModalTitle" class="font-semibold text-lg flex items-center gap-2">⏰ Neue Frist</h3>
       <button onclick="closeModal('reminderModal')" class="text-muted hover:text-ink text-xl">×</button>
     </div>
     <div class="flex flex-col gap-3">
+      <div>
+        <label class="text-xs text-muted mb-1 block">Vorlage (optional)</label>
+        <select id="remPreset" class="ds-input" onchange="applyReminderPreset()">
+          <option value="">– Eigene Frist –</option>
+        </select>
+      </div>
       <div>
         <label class="text-xs text-muted mb-1 block">Bezeichnung *</label>
         <input id="remTitle" class="ds-input" placeholder="z.B. Elektrobefund, Miele Service, Probezeit Lehrling">
@@ -424,35 +435,44 @@
           </select>
         </div>
         <div>
-          <label class="text-xs text-muted mb-1 block">Fällig am *</label>
-          <input id="remDueDate" type="date" class="ds-input">
+          <label class="text-xs text-muted mb-1 block">Intervall</label>
+          <select id="remInterval" class="ds-input" onchange="updateReminderPreview()">
+            <option value="0">Einmalig (kein festes Intervall)</option>
+            <option value="6">6 Monate</option>
+            <option value="12">1 Jahr</option>
+            <option value="24">2 Jahre</option>
+            <option value="48">4 Jahre</option>
+            <option value="60">5 Jahre</option>
+          </select>
         </div>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="text-xs text-muted mb-1 block">Erinnerung wie viele Tage vorher?</label>
-          <select id="remDaysBefore" class="ds-input">
-            <option value="3">3 Tage</option>
-            <option value="7" selected>1 Woche</option>
-            <option value="14">2 Wochen</option>
-            <option value="30">1 Monat</option>
-            <option value="60">2 Monate</option>
-            <option value="90">3 Monate</option>
-          </select>
+          <label class="text-xs text-muted mb-1 block">Zuletzt durchgeführt am</label>
+          <input id="remLastDone" type="date" class="ds-input" onchange="updateReminderPreview()">
         </div>
         <div>
-          <label class="text-xs text-muted mb-1 block">Wiederholen?</label>
-          <select id="remRepeat" class="ds-input">
-            <option value="0">Einmalig</option>
-            <option value="12">Jährlich</option>
-            <option value="24">Alle 2 Jahre</option>
-            <option value="36">Alle 3 Jahre</option>
-            <option value="60">Alle 5 Jahre</option>
-          </select>
+          <label class="text-xs text-muted mb-1 block">Fällig am *</label>
+          <input id="remDueDate" type="date" class="ds-input" onchange="updateReminderPreview()">
         </div>
       </div>
+      <div>
+        <label class="text-xs text-muted mb-1 block">Erinnerung wie viele Tage vorher?</label>
+        <select id="remDaysBefore" class="ds-input" onchange="updateReminderPreview()">
+          <option value="3">3 Tage</option>
+          <option value="7" selected>1 Woche</option>
+          <option value="14">2 Wochen</option>
+          <option value="30">1 Monat</option>
+          <option value="60">2 Monate</option>
+          <option value="90">3 Monate</option>
+        </select>
+      </div>
+      <p class="text-xs" style="color:#6B7280">
+        Bei gesetztem Intervall: „Zuletzt durchgeführt am“ eintragen – Fälligkeit und Erinnerung (14 Tage vorher) werden automatisch berechnet.
+      </p>
       <div id="remPreview" class="hidden p-3 rounded-lg text-xs font-mono" style="background:#F9731611;border:1px solid #F9731633;color:#F97316"></div>
     </div>
+    <input type="hidden" id="remEditId">
     <div class="flex gap-3 justify-end mt-5">
       <button class="btn-ghost" onclick="closeModal('reminderModal')">Abbrechen</button>
       <button style="background:#F97316;color:#fff;font-weight:600;border-radius:6px;padding:8px 16px;font-size:14px;cursor:pointer;border:none" onclick="saveReminder()">Speichern</button>
@@ -1501,7 +1521,7 @@ function renderReminders() {
     const isDue      = remindDate <= today && r.status !== 'resolved';
     const isResolved = r.status === 'resolved';
     const repeatLabel = r.repeat_interval_months > 0
-      ? `Wiederholt alle ${r.repeat_interval_months} Monate`
+      ? `Intervall: ${INTERVAL_LABELS[r.repeat_interval_months] || (r.repeat_interval_months + ' Monate')}`
       : 'Einmalig';
 
     return `<div style="background:#1E2436;border:1px solid ${isDue ? '#F9731666' : '#2A3048'};border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px;opacity:${isResolved ? '.55' : '1'}">
@@ -1516,11 +1536,12 @@ function renderReminders() {
           <p style="font-size:12px;color:#6B7280;font-family:monospace">
             Fällig: ${dueDate.toLocaleDateString('de-AT')} &nbsp;·&nbsp;
             Erinnerung: ${remindDate.toLocaleDateString('de-AT')} &nbsp;·&nbsp;
-            ${repeatLabel}
+            ${repeatLabel}${r.last_done_date ? ` &nbsp;·&nbsp; Zuletzt: ${new Date(r.last_done_date+'T00:00:00').toLocaleDateString('de-AT')}` : ''}
           </p>
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0">
-          ${!isResolved ? `<button onclick="resolveReminder('${r.id}')" style="background:#10B98122;color:#10B981;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer" title="Als erledigt markieren">✓</button>` : ''}
+          <button onclick="showReminderModal('${r.id}')" style="background:#2DD4BF22;color:#2DD4BF;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer" title="Bearbeiten">✎</button>
+          ${!isResolved ? `<button onclick="resolveReminder('${r.id}')" style="background:#10B98122;color:#10B981;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer" title="${r.repeat_interval_months > 0 ? 'Erledigt – nächste Fälligkeit berechnen' : 'Als erledigt markieren'}">✓</button>` : ''}
           <button onclick="deleteReminder('${r.id}','${esc(r.title)}')" style="background:#EF444411;color:#EF4444;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer" title="Löschen">✕</button>
         </div>
       </div>
@@ -1528,41 +1549,115 @@ function renderReminders() {
   }).join('');
 }
 
-function showReminderModal() {
-  // Heute als Standard-Datum setzen
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById('remDueDate').value = today;
-  document.getElementById('remTitle').value = '';
-  document.getElementById('remCategory').value = 'Allgemein';
-  document.getElementById('remDaysBefore').value = '7';
-  document.getElementById('remRepeat').value = '0';
-  document.getElementById('remPreview').classList.add('hidden');
-  document.getElementById('reminderModal').classList.remove('hidden');
+// ─── Fixe Intervall-Vorlagen ──────────────────────────────────────────────────
+// Jeder Eintrag hat ein fixes Intervall (in Monaten) hinterlegt, damit die nächste
+// Fälligkeit aus „Zuletzt durchgeführt am“ eindeutig berechnet werden kann.
+const REMINDER_PRESETS = [
+  { title: 'Betriebsanlagen-Eigenüberprüfung nach § 82b GewO', category: 'Behörden & Recht', interval: 60 },
+  { title: 'Versicherungsprüfung',                              category: 'Behörden & Recht', interval: 12 },
+  { title: 'Elektrobefund',                                     category: 'Geräte & Wartung',  interval: 60 },
+  { title: 'Prüfung elektrischer Geräte und Arbeitsmittel',     category: 'Geräte & Wartung',  interval: 12 },
+  { title: 'FI-Schalter-Prüfung durch Betreiber',               category: 'Geräte & Wartung',  interval: 6  },
+  { title: 'FI-Schalter messtechnische Prüfung durch Elektriker', category: 'Geräte & Wartung', interval: 60 },
+  { title: 'Feuerlöscher-Überprüfung',                          category: 'Geräte & Wartung',  interval: 24 },
+  { title: 'Verbandmaterial-Kontrolle',                         category: 'Personal',          interval: 6  },
+  { title: 'Auffrischung Erste-Hilfe-Kurs',                     category: 'Personal',          interval: 48 },
+  { title: 'Jährliche Sicherheitsunterweisung',                 category: 'Personal',          interval: 12 },
+  { title: 'Jährliche Unterweisung zu Chemikalien',             category: 'Personal',          interval: 12 },
+  { title: 'Kontrolle von Friseurstühlen, Leitern und Tritten', category: 'Geräte & Wartung',  interval: 12 },
+];
 
-  // Vorschau aktualisieren wenn Datum geändert wird
-  ['remDueDate','remDaysBefore'].forEach(id => {
-    document.getElementById(id).addEventListener('change', updateReminderPreview);
+const INTERVAL_LABELS = { 0: 'Einmalig (kein festes Intervall)', 6: '6 Monate', 12: '1 Jahr', 24: '2 Jahre', 48: '4 Jahre', 60: '5 Jahre' };
+const FIXED_INTERVAL_REMINDER_DAYS = 14;
+
+function initReminderPresetOptions() {
+  const sel = document.getElementById('remPreset');
+  if (!sel || sel.dataset.filled) return;
+  REMINDER_PRESETS.forEach((p, i) => {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = `${p.title} (${INTERVAL_LABELS[p.interval]})`;
+    sel.appendChild(opt);
   });
+  sel.dataset.filled = '1';
+}
+
+function applyReminderPreset() {
+  const idx = document.getElementById('remPreset').value;
+  if (idx === '') return;
+  const p = REMINDER_PRESETS[idx];
+  document.getElementById('remTitle').value = p.title;
+  document.getElementById('remCategory').value = p.category;
+  document.getElementById('remInterval').value = String(p.interval);
+  document.getElementById('remDaysBefore').value = String(FIXED_INTERVAL_REMINDER_DAYS);
+  updateReminderPreview();
+}
+
+function showReminderModal(id) {
+  initReminderPresetOptions();
+  const title = document.getElementById('reminderModalTitle');
+  document.getElementById('remPreset').value = '';
+  document.getElementById('remEditId').value = '';
+
+  if (id) {
+    const r = S.reminders.find(x => x.id === id);
+    if (!r) return;
+    title.textContent = '⏰ Frist bearbeiten';
+    document.getElementById('remEditId').value = r.id;
+    document.getElementById('remTitle').value = r.title;
+    document.getElementById('remCategory').value = r.category || 'Allgemein';
+    document.getElementById('remInterval').value = String(r.repeat_interval_months || 0);
+    document.getElementById('remLastDone').value = r.last_done_date || '';
+    document.getElementById('remDueDate').value = r.due_date;
+    document.getElementById('remDaysBefore').value = String(r.reminder_days_before || 7);
+  } else {
+    title.textContent = '⏰ Neue Frist';
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('remTitle').value = '';
+    document.getElementById('remCategory').value = 'Allgemein';
+    document.getElementById('remInterval').value = '0';
+    document.getElementById('remLastDone').value = '';
+    document.getElementById('remDueDate').value = today;
+    document.getElementById('remDaysBefore').value = '7';
+  }
+
+  updateReminderPreview();
+  document.getElementById('reminderModal').classList.remove('hidden');
 }
 
 function updateReminderPreview() {
-  const due   = document.getElementById('remDueDate').value;
-  const days  = parseInt(document.getElementById('remDaysBefore').value);
-  const prev  = document.getElementById('remPreview');
-  if (!due) { prev.classList.add('hidden'); return; }
-  const dueDate = new Date(due + 'T00:00:00');
+  const interval      = parseInt(document.getElementById('remInterval').value, 10);
+  const lastDone      = document.getElementById('remLastDone').value;
+  const daysBeforeSel = document.getElementById('remDaysBefore');
+  const prev          = document.getElementById('remPreview');
+
+  // Fixes Intervall + „zuletzt durchgeführt am“ → Fälligkeit & Erinnerung automatisch berechnen
+  if (interval > 0 && lastDone) {
+    const last = new Date(lastDone + 'T00:00:00');
+    const due  = new Date(last);
+    due.setMonth(due.getMonth() + interval);
+    document.getElementById('remDueDate').value = due.toISOString().split('T')[0];
+    daysBeforeSel.value = String(FIXED_INTERVAL_REMINDER_DAYS);
+  }
+
+  const dueVal = document.getElementById('remDueDate').value;
+  if (!dueVal) { prev.classList.add('hidden'); return; }
+  const days    = parseInt(daysBeforeSel.value, 10);
+  const dueDate = new Date(dueVal + 'T00:00:00');
   const remDate = new Date(dueDate);
   remDate.setDate(remDate.getDate() - days);
-  prev.textContent = `Erinnerung erscheint am: ${remDate.toLocaleDateString('de-AT')} (${days} Tage vor ${dueDate.toLocaleDateString('de-AT')})`;
+  prev.textContent = `Nächste Fälligkeit: ${dueDate.toLocaleDateString('de-AT')} · Erinnerung am: ${remDate.toLocaleDateString('de-AT')} (${days} Tage vorher)`;
   prev.classList.remove('hidden');
 }
 
 async function saveReminder() {
+  const editId  = document.getElementById('remEditId').value;
   const title   = document.getElementById('remTitle').value.trim();
   const dueStr  = document.getElementById('remDueDate').value;
-  const days    = parseInt(document.getElementById('remDaysBefore').value);
-  const repeat  = parseInt(document.getElementById('remRepeat').value);
+  const days    = parseInt(document.getElementById('remDaysBefore').value, 10);
+  const interval= parseInt(document.getElementById('remInterval').value, 10);
   const cat     = document.getElementById('remCategory').value;
+  const lastDoneStr = document.getElementById('remLastDone').value || null;
 
   if (!title)  { toast('Bezeichnung fehlt.', 'warn'); return; }
   if (!dueStr) { toast('Fälligkeitsdatum fehlt.', 'warn'); return; }
@@ -1573,51 +1668,83 @@ async function saveReminder() {
   remDate.setDate(remDate.getDate() - days);
   const remStr   = remDate.toISOString().split('T')[0];
 
+  const payload = {
+    title,
+    category:               cat,
+    due_date:               dueStr,
+    reminder_days_before:   days,
+    remind_at:              remStr,
+    repeat_interval_months: interval,
+    last_done_date:         lastDoneStr,
+  };
+
   try {
-    await sb('dokumentenschrank_erinnerungen', {
-      method: 'POST',
-      prefer: 'return=minimal',
-      body: JSON.stringify({
-        user_id:                S.userId,
-        title,
-        category:               cat,
-        due_date:               dueStr,
-        reminder_days_before:   days,
-        remind_at:              remStr,
-        repeat_interval_months: repeat,
-        status:                 'pending',
-      }),
-    });
-    toast(`Frist „${title}" gespeichert! Erinnerung am ${remDate.toLocaleDateString('de-AT')}.`);
+    if (editId) {
+      await sb(`dokumentenschrank_erinnerungen?id=eq.${editId}&user_id=eq.${S.userId}`, {
+        method: 'PATCH',
+        prefer: 'return=minimal',
+        body: JSON.stringify(payload),
+      });
+      toast(`Frist „${title}" aktualisiert.`);
+    } else {
+      await sb('dokumentenschrank_erinnerungen', {
+        method: 'POST',
+        prefer: 'return=minimal',
+        body: JSON.stringify({ user_id: S.userId, status: 'pending', ...payload }),
+      });
+      toast(`Frist „${title}" gespeichert! Erinnerung am ${remDate.toLocaleDateString('de-AT')}.`);
+
+      // GHD-Ereignis schreiben (Behörden & Recht / Geräte besonders wichtig)
+      const wichtig = ['Behörden & Recht','Geräte & Wartung'].includes(cat);
+      if (wichtig) {
+        fetch(`${SB_URL}/rest/v1/ghd_ereignisse`, {
+          method: 'POST',
+          headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token || SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+          body: JSON.stringify({
+            app: 'Schrank',
+            typ: 'frist_angelegt',
+            titel: `Neue Frist: ${title} (fällig ${dueDate.toLocaleDateString('de-AT')})`,
+            prioritaet: 'diese-woche',
+            gelesen: false,
+          })
+        }).catch(() => {});
+      }
+    }
     closeModal('reminderModal');
     fetchReminders();
-
-    // GHD-Ereignis schreiben (Behörden & Recht / Geräte besonders wichtig)
-    const wichtig = ['Behörden & Recht','Geräte & Wartung'].includes(cat);
-    if (wichtig) {
-      fetch(`${SB_URL}/rest/v1/ghd_ereignisse`, {
-        method: 'POST',
-        headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token || SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-        body: JSON.stringify({
-          app: 'Schrank',
-          typ: 'frist_angelegt',
-          titel: `Neue Frist: ${title} (fällig ${dueDate.toLocaleDateString('de-AT')})`,
-          prioritaet: 'diese-woche',
-          gelesen: false,
-        })
-      }).catch(() => {});
-    }
   } catch(e) { toast('Fehler: ' + e.message, 'error'); }
 }
 
 async function resolveReminder(id) {
+  const r = S.reminders.find(x => x.id === id);
   try {
-    await sb(`dokumentenschrank_erinnerungen?id=eq.${id}&user_id=eq.${S.userId}`, {
-      method: 'PATCH',
-      prefer: 'return=minimal',
-      body: JSON.stringify({ status: 'resolved' }),
-    });
-    toast('Als erledigt markiert.');
+    if (r && r.repeat_interval_months > 0) {
+      // Wiederkehrende Frist: nächsten Zyklus automatisch berechnen statt endgültig zu schließen
+      const prevDue = new Date(r.due_date + 'T00:00:00');
+      const nextDue = new Date(prevDue);
+      nextDue.setMonth(nextDue.getMonth() + r.repeat_interval_months);
+      const nextRemind = new Date(nextDue);
+      nextRemind.setDate(nextRemind.getDate() - (r.reminder_days_before || FIXED_INTERVAL_REMINDER_DAYS));
+
+      await sb(`dokumentenschrank_erinnerungen?id=eq.${id}&user_id=eq.${S.userId}`, {
+        method: 'PATCH',
+        prefer: 'return=minimal',
+        body: JSON.stringify({
+          status: 'pending',
+          last_done_date: r.due_date,
+          due_date: nextDue.toISOString().split('T')[0],
+          remind_at: nextRemind.toISOString().split('T')[0],
+        }),
+      });
+      toast(`Erledigt! Nächste Fälligkeit: ${nextDue.toLocaleDateString('de-AT')}.`);
+    } else {
+      await sb(`dokumentenschrank_erinnerungen?id=eq.${id}&user_id=eq.${S.userId}`, {
+        method: 'PATCH',
+        prefer: 'return=minimal',
+        body: JSON.stringify({ status: 'resolved' }),
+      });
+      toast('Als erledigt markiert.');
+    }
     fetchReminders();
   } catch(e) { toast('Fehler: ' + e.message, 'error'); }
 }
