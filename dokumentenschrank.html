@@ -486,13 +486,21 @@ let S = {
 // ─── Token Auto-Refresh ───────────────────────────────────────────────────────
 let _refreshToken = localStorage.getItem('ghd_refresh') || null;
 
+function expireLocalSession() {
+  toast('Session abgelaufen – bitte neu einloggen.', 'warn');
+  S.token = null;
+  _refreshToken = null;
+  setTimeout(() => {
+    localStorage.removeItem('ghd_token');
+    localStorage.removeItem('ghd_user');
+    localStorage.removeItem('ghd_refresh');
+    location.reload();
+  }, 2000);
+}
+
 async function refreshSession() {
   const rt = _refreshToken || localStorage.getItem('ghd_refresh');
-  if (!rt) {
-    toast('Session abgelaufen – bitte neu einloggen.', 'warn');
-    setTimeout(() => { localStorage.removeItem('ghd_token'); localStorage.removeItem('ghd_user'); location.reload(); }, 2000);
-    return;
-  }
+  if (!rt) { expireLocalSession(); return; }
   try {
     const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=refresh_token`, {
       method: 'POST',
@@ -505,20 +513,25 @@ async function refreshSession() {
       _refreshToken = d.refresh_token;
       localStorage.setItem('ghd_token', d.access_token);
       localStorage.setItem('ghd_refresh', d.refresh_token);
+    } else {
+      expireLocalSession();
     }
   } catch(e) {
-    toast('Session abgelaufen – bitte neu einloggen.', 'warn');
-    setTimeout(() => { localStorage.removeItem('ghd_token'); localStorage.removeItem('ghd_user'); location.reload(); }, 2000);
+    expireLocalSession();
   }
 }
 
 // ─── Supabase Fetch ───────────────────────────────────────────────────────────
 // ─── Supabase Fetch ───────────────────────────────────────────────────────────
 async function sb(path, opts = {}) {
+  // Kein anon-Key-Fallback: ohne aktive Session wird der Request verweigert
+  // statt still mit dem öffentlichen anon-Key an Supabase zu gehen.
+  if (!S.token) throw new Error('Keine aktive Session – bitte neu einloggen.');
+
   const doFetch = async () => {
     const headers = {
       'apikey': SB_KEY,
-      'Authorization': `Bearer ${S.token || SB_KEY}`,
+      'Authorization': `Bearer ${S.token}`,
       'Content-Type': 'application/json',
       ...(opts.prefer ? { 'Prefer': opts.prefer } : {}),
     };
@@ -534,6 +547,7 @@ async function sb(path, opts = {}) {
     // JWT abgelaufen → Token erneuern und nochmal versuchen
     if (e.message && e.message.includes('JWT')) {
       await refreshSession();
+      if (!S.token) throw new Error('Session abgelaufen – bitte neu einloggen.');
       return await doFetch();
     }
     throw e;
@@ -663,9 +677,21 @@ function showRegister() {
   document.getElementById('registerBox').classList.toggle('hidden');
 }
 
-function doLogout() {
+async function doLogout() {
+  // Refresh-Token serverseitig widerrufen, bevor der lokale Zustand geleert wird
+  if (S.token) {
+    try {
+      await fetch(`${SB_URL}/auth/v1/logout`, {
+        method: 'POST',
+        headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token}` },
+      });
+    } catch(e) { /* Netzwerkfehler ignorieren – lokal wird trotzdem bereinigt */ }
+  }
+  S.token = null;
+  _refreshToken = null;
   localStorage.removeItem('ghd_token');
   localStorage.removeItem('ghd_user');
+  localStorage.removeItem('ghd_refresh');
   location.reload();
 }
 
@@ -835,12 +861,12 @@ async function doUpload() {
     // ── GHD-EREIGNIS bei wichtigen Dokumenten ─────────────────────
     const wichtigeTags = ['#Rechnung', '#Vertrag', '#Steuer', '#Versicherung', '#Zugang'];
     const hatWichtigTag = allTags.some(t => wichtigeTags.includes(t));
-    if (hatWichtigTag) {
+    if (hatWichtigTag && S.token) {
       const tagLabel = allTags.filter(t => wichtigeTags.includes(t)).join(', ');
       const dateiName = filesToUpload[0] ? filesToUpload[0].name : 'Dokument';
       fetch(`${SB_URL}/rest/v1/ghd_ereignisse`, {
         method: 'POST',
-        headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token || SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
         body: JSON.stringify({
           app: 'Schrank',
           typ: 'dokument_hochgeladen',
@@ -1594,10 +1620,10 @@ async function saveReminder() {
 
     // GHD-Ereignis schreiben (Behörden & Recht / Geräte besonders wichtig)
     const wichtig = ['Behörden & Recht','Geräte & Wartung'].includes(cat);
-    if (wichtig) {
+    if (wichtig && S.token) {
       fetch(`${SB_URL}/rest/v1/ghd_ereignisse`, {
         method: 'POST',
-        headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token || SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
         body: JSON.stringify({
           app: 'Schrank',
           typ: 'frist_angelegt',
