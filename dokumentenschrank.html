@@ -405,7 +405,7 @@
 <div id="reminderModal" class="modal-bg hidden">
   <div class="modal-box">
     <div class="flex items-center justify-between mb-5">
-      <h3 class="font-semibold text-lg flex items-center gap-2">⏰ Neue Frist</h3>
+      <h3 id="reminderModalTitle" class="font-semibold text-lg flex items-center gap-2">⏰ Neue Frist</h3>
       <button onclick="closeModal('reminderModal')" class="text-muted hover:text-ink text-xl">×</button>
     </div>
     <div class="flex flex-col gap-3">
@@ -1443,6 +1443,8 @@ document.addEventListener('click', e => {
 <script>
 // ─── FRISTEN / ERINNERUNGEN ───────────────────────────────────────────────────
 
+let editingReminderId = null;
+
 async function fetchReminders() {
   try {
     const rows = await sb(
@@ -1520,6 +1522,7 @@ function renderReminders() {
           </p>
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0">
+          <button onclick="editReminder('${r.id}')" style="background:#60A5FA22;color:#60A5FA;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer" title="Bearbeiten">✏️</button>
           ${!isResolved ? `<button onclick="resolveReminder('${r.id}')" style="background:#10B98122;color:#10B981;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer" title="Als erledigt markieren">✓</button>` : ''}
           <button onclick="deleteReminder('${r.id}','${esc(r.title)}')" style="background:#EF444411;color:#EF4444;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer" title="Löschen">✕</button>
         </div>
@@ -1529,6 +1532,9 @@ function renderReminders() {
 }
 
 function showReminderModal() {
+  editingReminderId = null;
+  document.getElementById('reminderModalTitle').textContent = '⏰ Neue Frist';
+
   // Heute als Standard-Datum setzen
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('remDueDate').value = today;
@@ -1540,6 +1546,25 @@ function showReminderModal() {
   document.getElementById('reminderModal').classList.remove('hidden');
 
   // Vorschau aktualisieren wenn Datum geändert wird
+  ['remDueDate','remDaysBefore'].forEach(id => {
+    document.getElementById(id).addEventListener('change', updateReminderPreview);
+  });
+}
+
+function editReminder(id) {
+  const r = (S.reminders || []).find(x => x.id === id);
+  if (!r) return;
+  editingReminderId = id;
+  document.getElementById('reminderModalTitle').textContent = '✏️ Frist bearbeiten';
+
+  document.getElementById('remTitle').value = r.title;
+  document.getElementById('remCategory').value = r.category;
+  document.getElementById('remDueDate').value = r.due_date;
+  document.getElementById('remDaysBefore').value = String(r.reminder_days_before);
+  document.getElementById('remRepeat').value = String(r.repeat_interval_months);
+  updateReminderPreview();
+  document.getElementById('reminderModal').classList.remove('hidden');
+
   ['remDueDate','remDaysBefore'].forEach(id => {
     document.getElementById(id).addEventListener('change', updateReminderPreview);
   });
@@ -1573,40 +1598,60 @@ async function saveReminder() {
   remDate.setDate(remDate.getDate() - days);
   const remStr   = remDate.toISOString().split('T')[0];
 
+  const isEdit = !!editingReminderId;
+
   try {
-    await sb('dokumentenschrank_erinnerungen', {
-      method: 'POST',
-      prefer: 'return=minimal',
-      body: JSON.stringify({
-        user_id:                S.userId,
-        title,
-        category:               cat,
-        due_date:               dueStr,
-        reminder_days_before:   days,
-        remind_at:              remStr,
-        repeat_interval_months: repeat,
-        status:                 'pending',
-      }),
-    });
-    toast(`Frist „${title}" gespeichert! Erinnerung am ${remDate.toLocaleDateString('de-AT')}.`);
+    if (isEdit) {
+      await sb(`dokumentenschrank_erinnerungen?id=eq.${editingReminderId}&user_id=eq.${S.userId}`, {
+        method: 'PATCH',
+        prefer: 'return=minimal',
+        body: JSON.stringify({
+          title,
+          category:               cat,
+          due_date:               dueStr,
+          reminder_days_before:   days,
+          remind_at:              remStr,
+          repeat_interval_months: repeat,
+        }),
+      });
+      toast(`Frist „${title}" aktualisiert! Erinnerung am ${remDate.toLocaleDateString('de-AT')}.`);
+    } else {
+      await sb('dokumentenschrank_erinnerungen', {
+        method: 'POST',
+        prefer: 'return=minimal',
+        body: JSON.stringify({
+          user_id:                S.userId,
+          title,
+          category:               cat,
+          due_date:               dueStr,
+          reminder_days_before:   days,
+          remind_at:              remStr,
+          repeat_interval_months: repeat,
+          status:                 'pending',
+        }),
+      });
+      toast(`Frist „${title}" gespeichert! Erinnerung am ${remDate.toLocaleDateString('de-AT')}.`);
+
+      // GHD-Ereignis schreiben (Behörden & Recht / Geräte besonders wichtig)
+      const wichtig = ['Behörden & Recht','Geräte & Wartung'].includes(cat);
+      if (wichtig) {
+        fetch(`${SB_URL}/rest/v1/ghd_ereignisse`, {
+          method: 'POST',
+          headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token || SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+          body: JSON.stringify({
+            app: 'Schrank',
+            typ: 'frist_angelegt',
+            titel: `Neue Frist: ${title} (fällig ${dueDate.toLocaleDateString('de-AT')})`,
+            prioritaet: 'diese-woche',
+            gelesen: false,
+          })
+        }).catch(() => {});
+      }
+    }
+
+    editingReminderId = null;
     closeModal('reminderModal');
     fetchReminders();
-
-    // GHD-Ereignis schreiben (Behörden & Recht / Geräte besonders wichtig)
-    const wichtig = ['Behörden & Recht','Geräte & Wartung'].includes(cat);
-    if (wichtig) {
-      fetch(`${SB_URL}/rest/v1/ghd_ereignisse`, {
-        method: 'POST',
-        headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token || SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-        body: JSON.stringify({
-          app: 'Schrank',
-          typ: 'frist_angelegt',
-          titel: `Neue Frist: ${title} (fällig ${dueDate.toLocaleDateString('de-AT')})`,
-          prioritaet: 'diese-woche',
-          gelesen: false,
-        })
-      }).catch(() => {});
-    }
   } catch(e) { toast('Fehler: ' + e.message, 'error'); }
 }
 
