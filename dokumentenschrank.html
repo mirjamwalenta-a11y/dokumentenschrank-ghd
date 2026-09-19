@@ -1633,16 +1633,24 @@ async function saveReminder() {
       toast(`Frist „${title}" gespeichert! Erinnerung am ${remDate.toLocaleDateString('de-AT')}.`);
 
       // GHD-Ereignis schreiben (Behörden & Recht / Geräte besonders wichtig)
+      // Priorität richtet sich nach dem tatsächlichen Erinnerungstermin (remDate),
+      // nicht nach dem Zeitpunkt, an dem die Frist angelegt wurde — sonst wirkt
+      // eine erst 2029 fällige Frist so, als müsste man sich diese Woche darum kümmern.
       const wichtig = ['Behörden & Recht','Geräte & Wartung'].includes(cat);
       if (wichtig) {
+        const heuteMitternacht = new Date(); heuteMitternacht.setHours(0,0,0,0);
+        const tageBisErinnerung = Math.round((remDate - heuteMitternacht) / 86400000);
+        const prioritaet = tageBisErinnerung <= 0 ? 'heute'
+                          : tageBisErinnerung <= 7 ? 'diese-woche'
+                          : 'grau';
         fetch(`${SB_URL}/rest/v1/ghd_ereignisse`, {
           method: 'POST',
           headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token || SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
           body: JSON.stringify({
             app: 'Schrank',
             typ: 'frist_angelegt',
-            titel: `Neue Frist: ${title} (fällig ${dueDate.toLocaleDateString('de-AT')})`,
-            prioritaet: 'diese-woche',
+            titel: `Frist gespeichert: ${title} (fällig ${dueDate.toLocaleDateString('de-AT')})`,
+            prioritaet,
             gelesen: false,
           })
         }).catch(() => {});
