@@ -470,6 +470,17 @@
 // ─── Supabase Config ─────────────────────────────────────────────────────────
 const SB_URL = 'https://wrxlaltgtgkdomklgrlj.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndyeGxhbHRndGdrZG9ta2xncmxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyNDYwMzYsImV4cCI6MjA5OTgyMjAzNn0.Bw8ch-EJb_cLYTwxHdpjUJWgoCjje3Jc32pB0yiBS8g';
+// Wörni-Meldung über Serverfunktion (Team-Repo, Migration 20260927100000):
+// nur mit Login-Token; die App liest ghd_ereignisse nicht mehr selbst.
+// Je Dokument / Frist ein eigenes Ereignis (zusammenfassen: false), wie bisher.
+function ghdEreignis(typ, titel, prioritaet) {
+  if (!S.token) return;
+  fetch(`${SB_URL}/rest/v1/rpc/ghd_ereignis_melden`, {
+    method: 'POST',
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_app: 'Schrank', p_typ: typ, p_titel: titel, p_prioritaet: prioritaet, p_zusammenfassen: false })
+  }).catch(() => {});
+}
 const INVITE_CODE = 'GREATHAIR2026';
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -838,17 +849,7 @@ async function doUpload() {
     if (hatWichtigTag) {
       const tagLabel = allTags.filter(t => wichtigeTags.includes(t)).join(', ');
       const dateiName = filesToUpload[0] ? filesToUpload[0].name : 'Dokument';
-      fetch(`${SB_URL}/rest/v1/ghd_ereignisse`, {
-        method: 'POST',
-        headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token || SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-        body: JSON.stringify({
-          app: 'Schrank',
-          typ: 'dokument_hochgeladen',
-          titel: `Neues Dokument im Schrank: ${dateiName} (${tagLabel})`,
-          prioritaet: 'diese-woche',
-          gelesen: false,
-        })
-      }).catch(() => {});
+      ghdEreignis('dokument_hochgeladen', `Neues Dokument im Schrank: ${dateiName} (${tagLabel})`, 'diese-woche');
     }
   }
   closeModal('uploadModal');
@@ -1643,17 +1644,7 @@ async function saveReminder() {
         const prioritaet = tageBisErinnerung <= 0 ? 'heute'
                           : tageBisErinnerung <= 7 ? 'diese-woche'
                           : 'grau';
-        fetch(`${SB_URL}/rest/v1/ghd_ereignisse`, {
-          method: 'POST',
-          headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token || SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-          body: JSON.stringify({
-            app: 'Schrank',
-            typ: 'frist_angelegt',
-            titel: `Frist gespeichert: ${title} (fällig ${dueDate.toLocaleDateString('de-AT')})`,
-            prioritaet,
-            gelesen: false,
-          })
-        }).catch(() => {});
+        ghdEreignis('frist_angelegt', `Frist gespeichert: ${title} (fällig ${dueDate.toLocaleDateString('de-AT')})`, prioritaet);
       }
     }
 
