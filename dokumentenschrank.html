@@ -103,19 +103,8 @@
       <p id="loginError" class="text-xs hidden" style="color:#EF4444"></p>
       <button class="btn-teal w-full mt-1" onclick="doLogin()">Einloggen</button>
       <p class="text-xs text-center" style="color:#6B7280">
-        Noch kein Zugang? <span class="cursor-pointer" style="color:#2DD4BF" onclick="showRegister()">Registrieren</span>
+        Noch kein Zugang? Die Chefin lädt dich ein – du bekommst dann eine E-Mail.
       </p>
-    </div>
-    <!-- Register -->
-    <div id="registerBox" class="hidden mt-3" style="background:#1E2436;border:1px solid #2A3048;border-radius:12px;padding:24px">
-      <p class="text-sm font-medium mb-3">Neuen Zugang anlegen</p>
-      <div class="flex flex-col gap-3">
-        <input id="regEmail" type="email" class="ds-input" placeholder="E-Mail">
-        <input id="regPassword" type="password" class="ds-input" placeholder="Passwort (min. 8 Zeichen)">
-        <input id="regCode" class="ds-input" placeholder="Einladungs-Code">
-        <p id="regError" class="text-xs hidden" style="color:#EF4444"></p>
-        <button class="btn-teal" onclick="doRegister()">Konto erstellen</button>
-      </div>
     </div>
   </div>
 </div>
@@ -482,7 +471,6 @@ function ghdEreignis(typ, titel, prioritaet) {
     body: JSON.stringify({ p_app: 'Schrank', p_typ: typ, p_titel: titel, p_prioritaet: prioritaet, p_zusammenfassen: false })
   }).catch(() => {});
 }
-const INVITE_CODE = 'GREATHAIR2026';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let S = {
@@ -654,30 +642,18 @@ async function doLogin() {
   }
 }
 
-async function doRegister() {
-  const email = document.getElementById('regEmail').value.trim();
-  const pw    = document.getElementById('regPassword').value;
-  const code  = document.getElementById('regCode').value.trim();
-  const err   = document.getElementById('regError');
-  if (code !== INVITE_CODE) { err.textContent = 'Falscher Einladungs-Code.'; err.classList.remove('hidden'); return; }
-  try {
-    await sbAuth('signup', { email, password: pw });
-    err.style.color = '#2DD4BF';
-    err.textContent = 'Konto erstellt! Bitte E-Mail bestätigen, dann einloggen.';
-    err.classList.remove('hidden');
-  } catch(e) {
-    err.textContent = e.message;
-    err.classList.remove('hidden');
+async function doLogout() {
+  // Anmeldung auch auf dem Server beenden, damit der gespeicherte Refresh-Token ungültig wird
+  if (S.token) {
+    try {
+      await fetch(`${SB_URL}/auth/v1/logout?scope=local`, {
+        method: 'POST', headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token}` },
+      });
+    } catch(e) {}
   }
-}
-
-function showRegister() {
-  document.getElementById('registerBox').classList.toggle('hidden');
-}
-
-function doLogout() {
   localStorage.removeItem('ghd_token');
   localStorage.removeItem('ghd_user');
+  localStorage.removeItem('ghd_refresh');
   location.reload();
 }
 
