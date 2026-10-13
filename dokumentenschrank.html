@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <script src="https://mirjamwalenta-a11y.github.io/abwesenheiten-ghd/ghd-sitzung.js" data-schluessel="ghd_token,ghd_user,ghd_refresh"></script>  <!-- automatisch abmelden nach 15 min ohne Bedienung -->
+<script src="https://mirjamwalenta-a11y.github.io/abwesenheiten-ghd/ghd-offline.js" data-schluessel="ghd_token,ghd_user,ghd_refresh"></script>  <!-- offline nutzbar: Service Worker, gemerkte Daten, Nachsync -->
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="https://mirjamwalenta-a11y.github.io/abwesenheiten-ghd/icon-512.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mirjam Walenta – A great hair day · Schrank</title>
 <link rel="icon" href="icon.png" type="image/png">
@@ -507,6 +510,8 @@ async function refreshSession() {
       localStorage.setItem('ghd_refresh', d.refresh_token);
     }
   } catch(e) {
+    // Ohne Netz ist die Anmeldung nicht abgelaufen, nur nicht erneuerbar → nicht abmelden
+    if (!navigator.onLine) return;
     toast('Session abgelaufen – bitte neu einloggen.', 'warn');
     setTimeout(() => { localStorage.removeItem('ghd_token'); localStorage.removeItem('ghd_user'); location.reload(); }, 2000);
   }
