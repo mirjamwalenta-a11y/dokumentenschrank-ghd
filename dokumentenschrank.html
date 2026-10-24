@@ -984,7 +984,7 @@ function fileCard(f) {
   const date   = new Date(f.created_at).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric'});
   const size   = f.size ? (f.size < 1024*1024 ? (f.size/1024).toFixed(1)+' KB' : (f.size/1024/1024).toFixed(1)+' MB') : '';
   const isHtml = f.category === 'html_archive';
-  const isLink = f.file_url;
+  const isLink = f.storage_path || f.file_url;
   const displayName = f.original || f.name;
 
   return `<div class="file-card p-4 flex flex-col gap-3">
@@ -996,8 +996,8 @@ function fileCard(f) {
     ${f.description ? `<p class="text-xs" style="color:#6B7280;line-height:1.5">${esc(f.description)}</p>` : ''}
     <div class="flex flex-wrap gap-1 mb-1">${tags}</div>
     <div class="flex gap-2 flex-wrap">
-      ${isHtml && isLink ? `<button onclick="previewHtml('${esc(f.file_url)}','${esc(displayName)}')" style="background:#2DD4BF22;color:#2DD4BF;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;font-weight:600">👁 Vorschau</button>` : ''}
-      ${isLink ? `<a href="${esc(f.file_url)}" target="_blank" style="background:#FFFFFF0A;color:#9CA3AF;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;text-decoration:none;display:inline-block">↗ Öffnen</a>` : ''}
+      ${isHtml && isLink ? `<button onclick="previewHtml('${f.id}','${esc(displayName)}')" style="background:#2DD4BF22;color:#2DD4BF;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;font-weight:600">👁 Vorschau</button>` : ''}
+      ${isLink ? `<button onclick="oeffneDokument('${f.id}')" style="background:#FFFFFF0A;color:#9CA3AF;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer">↗ Öffnen</button>` : ''}
       <button onclick="showMoveFileModal('${f.id}','${esc(displayName)}')" style="background:#2DD4BF22;color:#2DD4BF;border:1px solid #2DD4BF44;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer" title="In Lade verschieben">📁 Lade</button>
       <button onclick="deleteFile('${f.id}','${esc(f.storage_path)}','${esc(displayName)}')" style="background:#EF444411;color:#EF4444;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;margin-left:auto">✕</button>
     </div>
@@ -1049,11 +1049,47 @@ async function deleteFile(id, storagePath, name) {
   } catch(e) { toast('Fehler: '+e.message, 'error'); }
 }
 
+// ─── Geschützte Links ─────────────────────────────────────────────────────────
+// Der Speicher schrank-files ist privat (supabase/migrations/20261024200000_schrank_files_privat.sql).
+// Zum Öffnen holt die App mit der Anmeldung einen signierten Link, der nach kurzer Zeit abläuft.
+async function signierterLink(f, sekunden = 120) {
+  if (f.storage_path) {
+    const holen = () => fetch(`${SB_URL}/storage/v1/object/sign/schrank-files/${f.storage_path}`, {
+      method: 'POST',
+      headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expiresIn: sekunden }),
+    });
+    try {
+      let r = await holen();
+      if (r.status === 400 || r.status === 401 || r.status === 403) { await refreshSession(); r = await holen(); }
+      if (r.ok) {
+        const d = await r.json();
+        if (d.signedURL) return `${SB_URL}/storage/v1${d.signedURL}`;
+      }
+    } catch(e) { console.error(e); }
+  }
+  // Übergang: solange der Speicher noch öffentlich ist, geht die alte Adresse
+  return f.file_url || null;
+}
+
+async function oeffneDokument(id) {
+  const f = S.files.find(x => x.id === id);
+  if (!f) return;
+  // Fenster sofort öffnen (sonst blockiert der Browser es nach dem Warten)
+  const w = window.open('', '_blank');
+  const url = await signierterLink(f);
+  if (!url) { if (w) w.close(); toast('Dokument konnte nicht geöffnet werden.', 'error'); return; }
+  if (w) w.location.href = url; else location.href = url;
+}
+
 // ─── HTML Vorschau ────────────────────────────────────────────────────────────
-function previewHtml(url, name) {
+async function previewHtml(id, name) {
+  const f = S.files.find(x => x.id === id);
+  const url = f && await signierterLink(f, 600);
+  if (!url) { toast('Vorschau konnte nicht geladen werden.', 'error'); return; }
   document.getElementById('detailTitle').textContent = name;
   document.getElementById('detailContent').innerHTML =
-    `<iframe src="${url}" style="border:none;width:100%;height:500px;border-radius:6px;background:white" sandbox="allow-scripts allow-same-origin"></iframe>`;
+    `<iframe src="${esc(url)}" style="border:none;width:100%;height:500px;border-radius:6px;background:white" sandbox="allow-scripts allow-same-origin"></iframe>`;
   document.getElementById('detailModal').classList.remove('hidden');
 }
 
