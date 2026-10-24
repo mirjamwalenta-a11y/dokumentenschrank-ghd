@@ -129,10 +129,11 @@
       <input id="searchInput" class="ds-input" placeholder="Suchen…" style="padding-left:36px">
     </div>
     <div class="flex items-center gap-2">
-      <button class="btn-teal flex items-center gap-2" onclick="showUploadModal()">
+      <button class="btn-teal flex items-center gap-2" onclick="showUploadModal()" aria-label="Hochladen">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-        Hochladen
+        <span class="hidden sm:inline">Hochladen</span>
       </button>
+      <button id="backupBtn" onclick="allesSichern()" class="btn-ghost text-xs px-3" title="Alle Dokumente als ZIP-Datei auf dieses Gerät laden" aria-label="Alles sichern">💾<span class="hidden sm:inline"> Alles sichern</span></button>
       <button onclick="doLogout()" class="btn-ghost text-xs px-3">Abmelden</button>
     </div>
   </div>
@@ -709,7 +710,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function init() {
-  fetchFiles();
+  fetchFiles().then(sicherungErinnern);
   fetchDrawers();
   fetchReminders();
   setInterval(fetchFiles, 60000);
@@ -1480,6 +1481,135 @@ function toast(msg, type='ok') {
   el.classList.remove('hidden');
   clearTimeout(_toastT);
   _toastT=setTimeout(()=>el.classList.add('hidden'),3500);
+}
+
+// ─── Alles sichern (ZIP) ──────────────────────────────────────────────────────
+// Das Supabase-Projekt hat im Gratis-Tarif keine Backups. Dieser Knopf lädt alle
+// Dokumente plus eine Übersicht (Laden, Fristen) als ZIP auf das Gerät.
+// Der Tresor ist nicht dabei: seine Einträge sind verschlüsselt und nur in der App lesbar.
+const BACKUP_KEY = 'ghd_schrank_letzte_sicherung';
+
+function ladeJSZip() {
+  if (window.JSZip) return Promise.resolve(window.JSZip);
+  return new Promise((ok, nein) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    s.onload = () => window.JSZip ? ok(window.JSZip) : nein(new Error('JSZip fehlt'));
+    s.onerror = () => nein(new Error('JSZip konnte nicht geladen werden'));
+    document.head.appendChild(s);
+  });
+}
+
+function csvZeile(werte) {
+  return werte.map(v => {
+    const s = Array.isArray(v) ? v.join(', ') : String(v ?? '');
+    return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  }).join(';');
+}
+
+function dateiname(s) {
+  return String(s || 'ohne Namen').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim() || 'ohne Namen';
+}
+
+async function dateiHolen(f) {
+  // Zuerst mit Anmeldung, sonst über die gespeicherte Adresse
+  const versuche = [];
+  if (f.storage_path) versuche.push([`${SB_URL}/storage/v1/object/authenticated/schrank-files/${f.storage_path}`,
+    { headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${S.token}` }, cache: 'no-store' }]);
+  if (f.file_url) versuche.push([f.file_url, { cache: 'no-store' }]);
+  for (const [url, opts] of versuche) {
+    try {
+      const r = await fetch(url, opts);
+      if (r.ok && !r.headers.get('x-ghd-offline')) return await r.blob();
+    } catch(e) { /* nächster Versuch */ }
+  }
+  return null;
+}
+
+let _sicherungLaeuft = false;
+async function allesSichern() {
+  if (_sicherungLaeuft) return;
+  if (!navigator.onLine) { toast('Zum Sichern braucht es eine Internetverbindung.', 'warn'); return; }
+  const btn = document.getElementById('backupBtn');
+  const btnHtml = btn.innerHTML;
+  _sicherungLaeuft = true;
+  btn.disabled = true;
+  try {
+    btn.textContent = '💾 Lade Liste…';
+    const [files, drawers, reminders, JSZip] = await Promise.all([
+      sb(`schrank_files?user_id=eq.${S.userId}&order=created_at.asc`),
+      sb(`schrank_drawers?user_id=eq.${S.userId}&order=sort_order.asc`).catch(() => []),
+      sb(`dokumentenschrank_erinnerungen?user_id=eq.${S.userId}&order=due_date.asc`).catch(() => []),
+      ladeJSZip(),
+    ]);
+    if (!files.length && !reminders.length) { toast('Es gibt noch nichts zu sichern.', 'warn'); return; }
+
+    const zip = new JSZip();
+    const ladeName = Object.fromEntries(drawers.map(d => [d.id, d.name]));
+    const vergeben = new Set();
+    const zeilen = [csvZeile(['Name', 'Lade', 'Kategorie', 'Tags', 'Beschreibung', 'Hochgeladen', 'Datei im ZIP'])];
+    const fehlend = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      btn.textContent = `💾 ${i + 1}/${files.length}…`;
+      const ordner = dateiname(f.drawer_id && ladeName[f.drawer_id] ? ladeName[f.drawer_id] : 'Ohne Lade');
+      let name = dateiname(f.name), pfad = `Dokumente/${ordner}/${name}`, n = 2;
+      while (vergeben.has(pfad.toLowerCase())) {
+        const p = name.lastIndexOf('.');
+        pfad = `Dokumente/${ordner}/${p > 0 ? name.slice(0, p) + ` (${n})` + name.slice(p) : name + ` (${n})`}`;
+        n++;
+      }
+      const blob = await dateiHolen(f);
+      if (blob) { zip.file(pfad, blob); vergeben.add(pfad.toLowerCase()); }
+      else fehlend.push(f.name);
+      zeilen.push(csvZeile([f.name, ladeName[f.drawer_id] || '', f.category, f.tags || [], f.description || '',
+        (f.created_at || '').slice(0, 10), blob ? pfad : 'FEHLT – konnte nicht geladen werden']));
+    }
+
+    // ﻿, damit Excel die Umlaute richtig anzeigt
+    zip.file('Uebersicht Dokumente.csv', '﻿' + zeilen.join('\r\n'));
+    if (reminders.length) {
+      zip.file('Fristen.csv', '﻿' + [csvZeile(['Titel', 'Kategorie', 'Fällig am', 'Erinnern am', 'Wiederholen (Monate)', 'Status'])]
+        .concat(reminders.map(r => csvZeile([r.title, r.category, r.due_date, r.remind_at, r.repeat_interval_months || 0, r.status])))
+        .join('\r\n'));
+    }
+    zip.file('Sicherung fuer die App.json', JSON.stringify({ gesichert: new Date().toISOString(), dokumente: files, laden: drawers, fristen: reminders }, null, 2));
+    if (fehlend.length) zip.file('FEHLT.txt', 'Diese Dokumente konnten nicht geladen werden:\r\n\r\n' + fehlend.join('\r\n'));
+
+    btn.textContent = '💾 Packe ZIP…';
+    const inhalt = await zip.generateAsync({ type: 'blob' });
+    const heute = new Date().toISOString().slice(0, 10);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(inhalt);
+    a.download = `Dokumentenschrank-Sicherung-${heute}.zip`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    try { localStorage.setItem(BACKUP_KEY, heute); } catch(e) {}
+    toast(fehlend.length
+      ? `Gesichert, aber ${fehlend.length} Dokument(e) fehlen – siehe FEHLT.txt im ZIP.`
+      : `${files.length} Dokument(e) gesichert.`, fehlend.length ? 'warn' : 'ok');
+  } catch(e) {
+    console.error(e);
+    toast('Sichern hat nicht geklappt: ' + e.message, 'error');
+  } finally {
+    _sicherungLaeuft = false;
+    btn.disabled = false;
+    btn.innerHTML = btnHtml;
+  }
+}
+
+// Erinnerung, wenn die letzte Sicherung länger als 30 Tage her ist
+function sicherungErinnern() {
+  let letzte = null;
+  try { letzte = localStorage.getItem(BACKUP_KEY); } catch(e) {}
+  const tage = letzte ? (Date.now() - new Date(letzte).getTime()) / 86400000 : Infinity;
+  if (tage > 30 && S.files.length) {
+    toast(letzte ? `Letzte Sicherung ist ${Math.floor(tage)} Tage her – bitte „💾 Alles sichern“ tippen.`
+                 : 'Tipp: Mit „💾 Alles sichern“ alle Dokumente als ZIP aufs Gerät laden.', 'warn');
+  }
+  const btn = document.getElementById('backupBtn');
+  if (btn) btn.title = letzte ? `Zuletzt gesichert: ${letzte.split('-').reverse().join('.')}` : 'Noch nie gesichert';
 }
 
 document.addEventListener('click', e => {
